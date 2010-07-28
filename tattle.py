@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import urllib
+import urlparse
 import traceback
 import xml.sax.saxutils
 
@@ -30,12 +31,14 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     /log/<process>/status/[OK|FAIL]/msg. text
     """
     def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
+
+        self.args = ['']
+
+        self.query = None
+        if '?' in self.path:
+            self.path, self.query = self.path.split('?', 1)
 
         self.args = urllib.unquote(self.path.strip('/ ')).split('/')
-
 
         dispatch = {
             '': self.show_status,
@@ -47,6 +50,14 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             'show': self.show,
         }
 
+
+        if self.args[0] != 'log':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+
+        # self.out does nothing when self.args[0] == 'log'
+
         self.out(self.template['hdr'])
         try:
             if self.args and self.args[0] in dispatch:
@@ -57,6 +68,11 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.out("<pre>%s</pre>" % traceback.format_exc())
             raise
         self.out(self.template['ftr'])
+
+        if self.args[0] == 'log':
+            self.send_response(303)
+            self.send_header('Location', '/')
+            self.end_headers()
     def entry(self, s, class_='', ts=None, prefix=''):
         if class_.strip():
             class_ = ' '+class_.strip()
@@ -103,20 +119,32 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         self.out('\n'.join(logs))
 
+        return 'logged'
+
     def log(self):
 
         args = self.args[:]
         args.pop(0)  # discard command name
-        tag = args.pop(0)
-        if args and args[0] == 'status':
-            args.pop(0)  # discard 'status'
-            status = args.pop(0)
+
+        if self.query:
+            dat = urlparse.parse_qs(self.query)
+            tag,status = dat["proctype"][0].split("::")
+            if '/STATUS/' in status:
+                status = status.replace('/STATUS/', '')
+            else:
+                status = 'INFO'
+            message = dat["msg"][0]
         else:
-            status = 'INFO'
-        if args:
-            message = '/'.join(args)
-        else:
-            message = '*no msg.*'
+            tag = args.pop(0)
+            if args and args[0] == 'status':
+                args.pop(0)  # discard 'status'
+                status = args.pop(0)
+            else:
+                status = 'INFO'
+            if args:
+                message = '/'.join(args)
+            else:
+                message = '*no msg.*'
 
         self.out(self.entry("'%s' says %s:%s" % (tag, status, message)))
 
@@ -195,9 +223,12 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 status = 'HARD'
 
             self.out(self.entry(message, class_=status, ts=timestamp))
-    def show_help(self):
-        self.out(self.template['help'])
 
+        self.out(self.template['manual'].format(process=tag, type=''))
+        self.out(self.template['manual'].format(process=tag, type='/STATUS/FAIL'))
+        self.out(self.template['manual'].format(process=tag, type='/STATUS/OK'))
+    def show_help(self):
+        self.out(self.template['help'].format(path=self.path))
     def show_status(self):
 
         con = sqlite3.connect(self.dbfile)
@@ -275,6 +306,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 timestamp = last_date = 'NEVER'
                 out_status = 'FAIL'
 
+                log_process = "<a title=%s href=%s>%s</a> " % (
+                    q(description), q('show/'+log_process), log_process)
+
             self.out(
                 "<div class='ent'>"
                 "<span class='tag'>%s <span class='ts %s'>%s </span> </span>"
@@ -304,6 +338,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         .time { font-size: 75%; font-style: italic; }
         a { text-decoration: none; }
         a:hover { text-decoration: underline; color: red }
+        .right { text-align: right }
         </style></head><body><div>
         <a href="/">Home</a>
         <a href="/quit">Re-start</a>
@@ -313,7 +348,14 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """</body></html>""",
 
         'help':
-        """<pre>HELP</pre>""",
+        """<pre>HELP</pre>
+        <pre>{path}</pre>""",
+
+        'manual':
+        """<form method="get" action="/log">
+        <div class='right'>/log/{process}{type}/<input name='msg' size='80'/>
+        <input type='hidden' name='proctype' value='{process}::{type}'/></div>
+        </form>"""
     }
 
 

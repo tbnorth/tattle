@@ -10,6 +10,7 @@
 <find_panel_settings/>
 <vnodes>
 <v t="tbrown.20100620094124.9540"><vh>@chapters</vh></v>
+<v t="tbrown.20100728090355.10722"><vh>cp</vh></v>
 <v t="tbrown.20100620094124.9539" a="E"><vh>@auto tattle.py</vh></v>
 <v t="tbrown.20100620094124.13686"><vh>pygeotag.py</vh></v>
 <v t="tbrown.20100620094124.9543"><vh>rhttp.py</vh></v>
@@ -316,6 +317,8 @@ if __name__ == '__main__':
 </t>
 <t tx="tbrown.20100621100519.9729">scp tattle.py 131.212.122.222:~/tattle/trunk/
 scp -P 10222 tattle.py 127.0.0.1:~/tattle/trunk/
+</t>
+<t tx="tbrown.20100728090355.10722">scp tattle.py 131.212.122.222:~/tattle/trunk/
 </t>
 </tnodes>
 </leo_file>
