@@ -169,8 +169,17 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def register(self):
 
-        cmd, tag, interval = self.args[:3]
-        description = '/'.join(self.args[3:])
+        if self.query:
+
+            dat = urlparse.parse_qs(self.query)
+            tag,dummy = dat["proctype"][0].split("::")
+            interval,description = dat["msg"][0].split("/",1)
+
+        else:
+
+            cmd, tag, interval = self.args[:3]
+            description = '/'.join(self.args[3:])
+
         interval = float(interval)
 
         self.out(self.entry("""Add/update '%s', "%s", interval=%f""" %
@@ -211,6 +220,14 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         else:
             description, interval = description
             interval = float(interval)
+
+        if not interval:
+            interval = 24.0
+
+        interval_td = datetime.timedelta(0,3600.*interval)
+        self.out('<h1>{process}: {intfmt}: {description}</h1>'.format(
+            process=tag, intfmt=self.td2str(interval_td), description=description))
+
         cur.execute("""select * from log where process=? order by timestamp desc limit 20""", [tag])
         logs = reversed(cur.fetchall())
 
@@ -224,9 +241,13 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
             self.out(self.entry(message, class_=status, ts=timestamp))
 
-        self.out(self.template['manual'].format(process=tag, type=''))
-        self.out(self.template['manual'].format(process=tag, type='/STATUS/FAIL'))
-        self.out(self.template['manual'].format(process=tag, type='/STATUS/OK'))
+        for i in '', '/STATUS/FAIL', '/STATUS/OK':
+            self.out(self.template['manual'].format(
+                action='log', process=tag, type=i, value=''))
+
+        self.out(self.template['manual'].format(
+            action='register', process=tag, type='',
+            value="%s/%s"%(interval,description)))
     def show_help(self):
         self.out(self.template['help'].format(path=self.path))
     def show_status(self):
@@ -282,12 +303,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 else:
                     sep = due-now
 
-                spare = "%dd%dh%dm%ds" % (
-                    sep.days,
-                    sep.seconds//3600,
-                    sep.seconds%3600//60,
-                    sep.seconds%60
-                )
+                spare = self.td2str(sep)
 
                 log_process = "<a title=%s href=%s>%s</a> " % (
                     q(description), q('show/'+log_process), log_process)
@@ -315,6 +331,13 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 " <span class='msg'> %s <span class='time'>%s</span></span>"
                 "</div>" % (log_process, out_status, timestamp, message, spare))
 
+    def td2str(self, sep):
+        return "%dd%dh%dm%ds" % (
+            sep.days,
+            sep.seconds//3600,
+            sep.seconds%3600//60,
+            sep.seconds%60
+        )
     schema = {
         'process':
         [('process', 'text'), ('interval', 'float'), ('description', 'text'), 
@@ -352,8 +375,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         <pre>{path}</pre>""",
 
         'manual':
-        """<form method="get" action="/log">
-        <div class='right'>/log/{process}{type}/<input name='msg' size='80'/>
+        """<form method="get" action="/{action}">
+        <div class='right'>/{action}/{process}{type}/<input name='msg' size='80'
+          value='{value}'/>
         <input type='hidden' name='proctype' value='{process}::{type}'/></div>
         </form>"""
     }
