@@ -225,7 +225,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             interval = 24.0
 
         interval_td = datetime.timedelta(0,3600.*interval)
-        self.out('<h1>{process}: {intfmt}: {description}</h1>'.format(
+        self.out('<h1>{process}: {intfmt} : {description}</h1>'.format(
             process=tag, intfmt=self.td2str(interval_td), description=description))
 
         cur.execute("""select * from log where process=? order by timestamp desc limit 20""", [tag])
@@ -332,11 +332,11 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 "</div>" % (log_process, out_status, timestamp, message, spare))
 
     def td2str(self, sep):
-        return "%dd%dh%dm%ds" % (
+        return "%dd%02d:%02d" % (
             sep.days,
             sep.seconds//3600,
             sep.seconds%3600//60,
-            sep.seconds%60
+            # sep.seconds%60
         )
     schema = {
         'process':
