@@ -262,6 +262,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cur.execute("""
             select process, 0, 'NEW', process.*, 'NEW' from
             process left join log using (process) where log.process is null
+              and (description is null or description not like 'DEFUNCT:%')
 
             union
 
@@ -269,6 +270,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             last_msg 
             join log on (last_msg.process = log.process and log.timestamp = last)
             left join process on (last_msg.process = process.process)
+
+            where (description is null or description not like 'DEFUNCT:%')
+
             order by last
             """)
 
