@@ -242,8 +242,10 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.out(self.entry(message, class_=status, ts=timestamp))
 
         for i in '', '/STATUS/FAIL', '/STATUS/OK':
+            uptype = i
+            type_=i.replace('STATUS', 'status')
             self.out(self.template['manual'].format(
-                action='log', process=tag, type=i, value=''))
+                action='log', process=tag, type=type_, uptype=uptype, value=''))
 
         self.out(self.template['manual'].format(
             action='register', process=tag, type='',
@@ -382,7 +384,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """<form method="get" action="/{action}">
         <div class='right'>/{action}/{process}{type}/<input name='msg' size='80'
           value='{value}'/>
-        <input type='hidden' name='proctype' value='{process}::{type}'/></div>
+        <input type='hidden' name='proctype' value='{process}::{uptype}'/></div>
         </form>"""
     }
 
