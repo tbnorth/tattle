@@ -248,7 +248,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 action='log', process=tag, type=type_, uptype=uptype, value=''))
 
         self.out(self.template['manual'].format(
-            action='register', process=tag, type='',
+            action='register', process=tag, type='', uptype='',
             value="%s/%s"%(interval,description)))
     def show_help(self):
         self.out(self.template['help'].format(path=self.path))
