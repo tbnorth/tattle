@@ -10,10 +10,10 @@
 <find_panel_settings/>
 <vnodes>
 <v t="tbrown.20100620094124.9540"><vh>@chapters</vh></v>
-<v t="tbrown.20100621100519.9729"><vh>cp</vh></v>
 <v t="tbrown.20100620094124.9539" a="E"><vh>@auto tattle.py</vh></v>
 <v t="tbrown.20100620094124.13686"><vh>pygeotag.py</vh></v>
 <v t="tbrown.20100620094124.9543"><vh>rhttp.py</vh></v>
+<v t="tbrown.20100621100519.9729"><vh>cp</vh></v>
 </vnodes>
 <tnodes>
 <t tx="tbrown.20100620094124.13686"># coding=utf8
@@ -47,7 +47,6 @@ class QueueTimeout(Queue.Queue):
                 self.all_tasks_done.wait(remaining)
         finally:
             self.all_tasks_done.release()
-
 class PyGeoTag(object):
     def __init__(self, callback=None, synchronous=False):
 
@@ -314,8 +313,8 @@ def run(server_class=BaseHTTPServer.HTTPServer,
 if __name__ == '__main__':
     run()
 </t>
-<t tx="tbrown.20100621100519.9729">scp tattle.py 131.212.122.222:~/tattle/trunk/
-scp -P 10222 tattle.py 127.0.0.1:~/tattle/trunk/
+<t tx="tbrown.20100621100519.9729">scp -r ../../tattle 131.212.122.222:~/ 
+scp -P 10222 -r ../../tattle 127.0.0.1:~/ 
 </t>
 </tnodes>
 </leo_file>
