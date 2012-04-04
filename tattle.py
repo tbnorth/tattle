@@ -28,7 +28,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       register a process with tag <process> which should report ever <hours> hours
       repeating ok, just changes interval and description
     /log/<process>/msg. text
-    /log/<process>/status/[OK|FAIL]/msg. text
+    /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
     """
     def do_GET(self):
 
@@ -42,6 +42,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         dispatch = {
             '': self.show_status,
+            'all': self.show_all,
             'quit': self.quit,
             'test': self.init,
             'init': self.init,
@@ -239,6 +240,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if status == 'FAIL':
                 status = 'HARD'
 
+            if status in ('DISABLE', 'ENABLE'):
+                message = "%s: %s" % (status, message)
+                
             self.out(self.entry(message, class_=status, ts=timestamp))
 
         for i in '', '/STATUS/FAIL', '/STATUS/OK':
@@ -252,7 +256,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             value="%s/%s"%(interval,description)))
     def show_help(self):
         self.out(self.template['help'].format(path=self.path))
-    def show_status(self):
+    def show_all(self):
+        self.show_status(show_all=True)
+    def show_status(self, show_all=False):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
@@ -279,6 +285,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             """)
 
         for log_process, last, message, process, interval, description, status in cur.fetchall():
+            
+            if status == 'DISABLE' and not show_all:
+                continue
 
             if not interval:
                 interval = 24.0
@@ -299,7 +308,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 due = last_date + interval_td
 
                 out_status = status
-                if now > due or status != 'OK':
+                if now > due or status not in ('OK', 'DISABLE', 'ENABLE'):
                     out_status = 'FAIL'
                 if status == 'FAIL':
                     out_status = 'HARD'
@@ -347,7 +356,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     schema = {
         'process':
         [('process', 'text'), ('interval', 'float'), ('description', 'text'), 
-         # ('test', 'test'), 
+         # ('active', 'boolean'), # ('test', 'test'), 
         ],
         'log':
         [('process', 'text'), ('timestamp', 'datetime'),
@@ -360,6 +369,8 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         .FAIL { background: pink; }
         .HARD { background: red; }
         .OK { background: #afa; }
+        .DISABLE { background: #ccc; }
+        .ENABLE { background: cyan; }
         .ent { float: left; width: 49% }
         .tag { display: block; width: 40%; float: left; text-align:right; }
         .msg { display: block; float: left; width: 59%; padding-left: 1%;}
@@ -370,6 +381,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         .right { text-align: right }
         </style></head><body><div>
         <a href="/">Home</a>
+        <a href="/all">Show disabled</a>
         <a href="/quit">Re-start</a>
         </div><hr/>""",
 
