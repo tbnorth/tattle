@@ -1,6 +1,7 @@
 """see class tattleRequestHandler"""
 
 import BaseHTTPServer
+import SocketServer
 import datetime
 import sqlite3
 import os
@@ -366,6 +367,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     template = {
         'hdr':
         """<html><head><style>
+        * { font-family: sans-serif; font-size: 90%; }
         .FAIL { background: pink; }
         .HARD { background: red; }
         .OK { background: #afa; }
@@ -400,6 +402,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         </form>"""
     }
 
+
+class ThreadedServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
+    pass
 
 def run(server_class=BaseHTTPServer.HTTPServer,
         handler_class=tattleRequestHandler):
