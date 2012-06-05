@@ -367,7 +367,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     template = {
         'hdr':
         """<html><head><style>
-        * { font-family: sans-serif; font-size: 90%; }
+        body { font-family: sans-serif; font-size: 90%; }
         .FAIL { background: pink; }
         .HARD { background: red; }
         .OK { background: #afa; }
