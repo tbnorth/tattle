@@ -259,6 +259,13 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.out(self.template['help'].format(path=self.path))
     def show_all(self):
         self.show_status(show_all=True)
+    def td2str(self, sep):
+        return "%dd%02d:%02d" % (
+            sep.days,
+            sep.seconds//3600,
+            sep.seconds%3600//60,
+            # sep.seconds%60
+        )
     def show_status(self, show_all=False):
 
         con = sqlite3.connect(self.dbfile)
@@ -290,11 +297,22 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if status == 'DISABLE' and not show_all:
                 continue
 
+            assumed_interval = False
             if not interval:
                 interval = 24.0
+                assumed_interval = True
 
             if not description:
                 description = '*unregistered process, assuming 24h interval*'
+
+            details = ''
+
+            sep = 3600.*interval
+            interval_txt = "%dd%dh%dm" % (
+                sep//(3600*24),
+                sep%(3600*24)//3600,
+                sep%3600//60
+            )
 
             if last != 0:
 
@@ -316,44 +334,40 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
                 if now > due:
                     sep = now-due
+                    spare = '-'+self.td2str(sep)
                 else:
                     sep = due-now
-
-                spare = self.td2str(sep)
-
-                log_process = "<a title=%s href=%s>%s</a> " % (
-                    q(description), q('show/'+log_process), log_process)
+                    spare = '+'+self.td2str(sep)
 
                 timestamp = last_date.strftime("%d&nbsp;%H:%M:%S")
-
+                
+                details = ", last %s, %s %s" % (
+                    last_date.strftime('%b %d %Y %H:%M'),
+                    'overdue' if now > due else 'due',
+                    due.strftime('%b %d %Y %H:%M'),
+                )
+                    
             else:  # last == 0
 
-                sep = 3600.*interval
-                spare = "interval=%dd%dh%dm%ds" % (
-                    sep//(3600*24),
-                    sep%(3600*24)//3600,
-                    sep%3600//60,
-                    sep%60
-                )
+                spare = 'interval='+interval_txt
                 timestamp = last_date = 'NEVER'
                 out_status = 'FAIL'
+                
+            details = 'Every %s%s%s' % (
+                interval_txt,
+                ' (assumed)' if assumed_interval else '',
+                details,
+            )
 
-                log_process = "<a title=%s href=%s>%s</a> " % (
-                    q(description), q('show/'+log_process), log_process)
+            log_process = "<a title=%s href=%s>%s</a> " % (
+                q(description), q('show/'+log_process), log_process)
 
             self.out(
                 "<div class='ent'>"
-                "<span class='tag'>%s <span class='ts %s'>%s </span> </span>"
+                "<span class='tag'>%s <span title='%s'class='ts %s'>%s </span> </span>"
                 " <span class='msg'> %s <span class='time'>%s</span></span>"
-                "</div>" % (log_process, out_status, timestamp, message, spare))
+                "</div>" % (log_process, details, out_status, timestamp, message, spare))
 
-    def td2str(self, sep):
-        return "%dd%02d:%02d" % (
-            sep.days,
-            sep.seconds//3600,
-            sep.seconds%3600//60,
-            # sep.seconds%60
-        )
     schema = {
         'process':
         [('process', 'text'), ('interval', 'float'), ('description', 'text'), 
