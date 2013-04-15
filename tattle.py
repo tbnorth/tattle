@@ -156,7 +156,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cur = con.cursor()
         cur.execute("""insert into log (process, timestamp, status, message, ip)
             values (?,?,?,?,?)""", 
-            [tag, timestamp, status, message, self.headers['host']])
+            [tag, timestamp, status, message, self.client_address[0]])
         con.commit()
     def out(self, s):
 
