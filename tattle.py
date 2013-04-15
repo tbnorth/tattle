@@ -32,7 +32,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
     """
     def do_GET(self):
-
+        
         self.args = ['']
 
         self.query = None
@@ -92,7 +92,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         logs = []
 
         logs.append(self.entry("DB file %s..."%self.dbfile))
-        logs.append(self.entry("...exits: %s"%os.path.isfile(self.dbfile)))
+        logs.append(self.entry("...exists: %s"%os.path.isfile(self.dbfile)))
         logs.append(self.entry("Got connection ok..."))
         con = sqlite3.connect(self.dbfile)
         logs.append(self.entry(bool(con)))
@@ -154,8 +154,9 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
-        cur.execute("""insert into log (process, timestamp, status, message)
-            values (?,?,?,?)""", [tag, timestamp, status, message])
+        cur.execute("""insert into log (process, timestamp, status, message, ip)
+            values (?,?,?,?,?)""", 
+            [tag, timestamp, status, message, self.headers['host']])
         con.commit()
     def out(self, s):
 
@@ -233,7 +234,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cur.execute("""select * from log where process=? order by timestamp desc limit 20""", [tag])
         logs = reversed(cur.fetchall())
 
-        for process, timestamp, status, message in logs:
+        for process, timestamp, status, message, ip in logs:
 
             timestamp = timestamp.split('.')[0]  # drop fractional seconds, for now
             timestamp = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
@@ -276,13 +277,13 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             group by process""")
 
         cur.execute("""
-            select process, 0, 'NEW', process.*, 'NEW' from
+            select process, 0, 'NEW', process.*, 'NEW', 'NEW' from
             process left join log using (process) where log.process is null
               and (description is null or description not like 'DEFUNCT:%')
 
             union
 
-            select last_msg.process, last, message, process.*, status from
+            select last_msg.process, last, message, process.*, status, ip from
             last_msg 
             join log on (last_msg.process = log.process and log.timestamp = last)
             left join process on (last_msg.process = process.process)
@@ -292,7 +293,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             order by last
             """)
 
-        for log_process, last, message, process, interval, description, status in cur.fetchall():
+        for log_process, last, message, process, interval, description, status, ip in cur.fetchall():
             
             if status == 'DISABLE' and not show_all:
                 continue
@@ -353,10 +354,10 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 timestamp = last_date = 'NEVER'
                 out_status = 'FAIL'
                 
-            details = 'Every %s%s%s' % (
+            details = 'Every %s%s%s, %s' % (
                 interval_txt,
                 ' (assumed)' if assumed_interval else '',
-                details,
+                details, ip
             )
 
             log_process = "<a title=%s href=%s>%s</a> " % (
@@ -375,7 +376,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         ],
         'log':
         [('process', 'text'), ('timestamp', 'datetime'),
-         ('status', 'text'), ('message', 'text'), ],
+         ('status', 'text'), ('message', 'text'), ('ip', 'text')],
     }
 
     template = {
