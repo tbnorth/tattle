@@ -104,17 +104,26 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 logs.append(self.entry("Table '%s' doesn't exist, creating."%table))
                 cur.execute('create table %s (%s)' % (table,
                     ','.join(["%s %s"%(i[0],i[1]) for i in self.schema[table]])))
+                for i in self.schema[table]:
+                    if len(i) > 2 and i[2]:
+                        cur.execute('create %s %s_%s_idx on %s (%s)' % (
+                            i[2],  # 'index' or 'unique index'
+                            table, i[0], table, i[0]))
             else:
                 logs.append(self.entry("Table '%s' found ok"%table))
                 cur.execute("PRAGMA table_info(%s)"%table)
                 fields = [i[1] for i in cur.fetchall()]
-                for field,type_ in self.schema[table]:
+                for field,type_,index in [(i+(None,))[:3] for i in self.schema[table]]:
                     if field not in fields:
 
                         logs.append(
                             self.entry("Field '%s' doesn't exist, creating."%field))
                         cur.execute('alter table %s add %s %s' % (table,
                             field, type_))
+                        if index:
+                            cur.execute('create %s %s_%s_idx on %s (%s)' % (
+                                index,  # 'index' or 'unique index'
+                                table, field, table, field))
                         con.commit()
                     else:
                         logs.append(self.entry("Field '%s' found ok"%field))
@@ -371,11 +380,12 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     schema = {
         'process':
-        [('process', 'text'), ('interval', 'float'), ('description', 'text'), 
+        [('process', 'text', 'unique index'), ('interval', 'float'), 
+         ('description', 'text'), 
          # ('active', 'boolean'), # ('test', 'test'), 
         ],
         'log':
-        [('process', 'text'), ('timestamp', 'datetime'),
+        [('process', 'text', 'index'), ('timestamp', 'datetime', 'index'),
          ('status', 'text'), ('message', 'text'), ('ip', 'text')],
     }
 
