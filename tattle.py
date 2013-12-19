@@ -389,43 +389,59 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         [('process', 'text', 'index'), ('timestamp', 'datetime', 'index'),
          ('status', 'text'), ('message', 'text'), ('ip', 'text')],
     }
+    
+    colors = {
+        'FAIL': 'pink',
+        'HARD': 'red',
+        'OK': '#afa',
+        'DISABLE': '#ccc',
+        'ENABLE': 'cyan',
+    }
+    if 0:  # color-blind friendly version
+        colors = {
+            'FAIL': 'yellow',
+            'HARD': 'orange',
+            'OK': '#aaf',
+            'DISABLE': '#ccc',
+            'ENABLE': '#afa',
+        }
 
     template = {
         'hdr':
-        """<html><head><style>
-        body { font-family: sans-serif; font-size: 90%; }
-        .FAIL { background: pink; }
-        .HARD { background: red; }
-        .OK { background: #afa; }
-        .DISABLE { background: #ccc; }
-        .ENABLE { background: cyan; }
-        .ent { float: left; width: 49% }
-        .tag { display: block; width: 40%; float: left; text-align:right; }
-        .msg { display: block; float: left; width: 59%; padding-left: 1%;}
-        .ts { color: blue; font-size: 75%; }
-        .time { font-size: 75%; font-style: italic; }
-        a { text-decoration: none; }
-        a:hover { text-decoration: underline; color: red }
-        .right { text-align: right }
-        </style></head><body><div>
-        <a href="/">Home</a>
-        <a href="/all">Show disabled</a>
-        <a href="/quit">Re-start</a>
-        </div><hr/>""",
+            """<html><head><style>
+            body {{ font-family: sans-serif; font-size: 90%; }}
+            .FAIL {{ background: {FAIL}; }}
+            .HARD {{ background: {HARD}; }}
+            .OK {{ background: {OK}; }}
+            .DISABLE {{ background: {DISABLE}; }}
+            .ENABLE {{ background: {ENABLE}; }}
+            .ent {{ float: left; width: 49% }}
+            .tag {{ display: block; width: 40%; float: left; text-align:right; }}
+            .msg {{ display: block; float: left; width: 59%; padding-left: 1%;}}
+            .ts {{ color: blue; font-size: 75%; }}
+            .time {{ font-size: 75%; font-style: italic; }}
+            a {{ text-decoration: none; }}
+            a:hover {{ text-decoration: underline; color: red }}
+            .right {{ text-align: right }}
+            </style></head><body><div>
+            <a href="/">Home</a>
+            <a href="/all">Show disabled</a>
+            <a href="/quit">Re-start</a>
+            </div><hr/>""".format(**colors),
 
         'ftr':
-        """</body></html>""",
+            """</body></html>""",
 
         'help':
-        """<pre>HELP</pre>
-        <pre>{path}</pre>""",
+            """<pre>HELP</pre>
+            <pre>{path}</pre>""",
 
         'manual':
-        """<form method="get" action="/{action}">
-        <div class='right'>/{action}/{process}{type}/<input name='msg' size='80'
-          value='{value}'/>
-        <input type='hidden' name='proctype' value='{process}::{uptype}'/></div>
-        </form>"""
+            """<form method="get" action="/{action}">
+            <div class='right'>/{action}/{process}{type}/<input name='msg' size='80'
+              value='{value}'/>
+            <input type='hidden' name='proctype' value='{process}::{uptype}'/></div>
+            </form>"""
     }
 
 
