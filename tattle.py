@@ -39,7 +39,8 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if '?' in self.path:
             self.path, self.query = self.path.split('?', 1)
 
-        self.args = urllib.unquote(self.path.strip('/ ')).split('/')
+        path = urllib.unquote(self.path.strip('/ '))
+        self.args = path.split('/')
 
         dispatch = {
             '': self.show_status,
@@ -52,8 +53,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             'show': self.show,
         }
 
-
-        if self.args[0] != 'log':
+        if self.args[0] != 'log' or self.query:
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
@@ -71,10 +71,11 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise
         self.out(self.template['ftr'])
 
-        if self.args[0] == 'log':
-            self.send_response(303)
-            self.send_header('Location', '/')
+        if self.args[0] == 'log' and not self.query:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
             self.end_headers()
+            self.wfile.write("%s ACKNOWLEDGED\n" % path)
     def entry(self, s, class_='', ts=None, prefix=''):
         if class_.strip():
             class_ = ' '+class_.strip()
@@ -169,7 +170,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         con.commit()
     def out(self, s):
 
-        if self.args[0] != 'log':
+        if self.args[0] != 'log' or self.query:
             self.wfile.write(s)
 
     def quit(self):
