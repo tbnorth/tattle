@@ -1,18 +1,21 @@
 """see class tattleRequestHandler"""
 
-import BaseHTTPServer
-import SocketServer
 import datetime
-import sqlite3
 import os
+import sqlite3
 import sys
 import threading
-import urllib
-import urlparse
 import traceback
+import urllib
 import xml.sax.saxutils
 
+import BaseHTTPServer
+import SocketServer
+import urlparse
+
 q = xml.sax.saxutils.quoteattr
+
+
 class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """
     tattle.py, dependency free simple batch monitoring system.
@@ -31,36 +34,37 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     /log/<process>/msg. text
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
     """
+
     def do_GET(self):
-        
-        self.args = ['']
+
+        self.args = [""]
 
         self.query = None
-        if '?' in self.path:
-            self.path, self.query = self.path.split('?', 1)
+        if "?" in self.path:
+            self.path, self.query = self.path.split("?", 1)
 
-        path = urllib.unquote(self.path.strip('/ '))
-        self.args = path.split('/')
+        path = urllib.unquote(self.path.strip("/ "))
+        self.args = path.split("/")
 
         dispatch = {
-            '': self.show_status,
-            'all': self.show_all,
-            'quit': self.quit,
-            'test': self.init,
-            'init': self.init,
-            'register': self.register,
-            'log': self.log,
-            'show': self.show,
+            "": self.show_status,
+            "all": self.show_all,
+            "quit": self.quit,
+            "test": self.init,
+            "init": self.init,
+            "register": self.register,
+            "log": self.log,
+            "show": self.show,
         }
 
-        if self.args[0] != 'log' or self.query:
+        if self.args[0] != "log" or self.query:
             self.send_response(200)
-            self.send_header('Content-type', 'text/html')
+            self.send_header("Content-type", "text/html")
             self.end_headers()
 
         # self.out does nothing when self.args[0] == 'log'
 
-        self.out(self.template['hdr'])
+        self.out(self.template["hdr"])
         try:
             if self.args and self.args[0] in dispatch:
                 dispatch[self.args[0]]()
@@ -69,31 +73,31 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         except Exception:
             self.out("<pre>%s</pre>" % traceback.format_exc())
             raise
-        self.out(self.template['ftr'])
+        self.out(self.template["ftr"])
 
-        if self.args[0] == 'log' and not self.query:
+        if self.args[0] == "log" and not self.query:
             self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-type", "text/plain")
             self.end_headers()
             self.wfile.write("%s ACKNOWLEDGED\n" % path)
-    def entry(self, s, class_='', ts=None, prefix=''):
+
+    def entry(self, s, class_="", ts=None, prefix=""):
         if class_.strip():
-            class_ = ' '+class_.strip()
+            class_ = " " + class_.strip()
         if not ts:
             ts = datetime.datetime.now()
 
         if isinstance(ts, datetime.datetime):
             ts = ts.strftime("%d %H:%M:%S")
 
-        return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (
-            prefix, class_, ts, s)
+        return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
 
     def init(self):
 
         logs = []
 
-        logs.append(self.entry("DB file %s..."%self.dbfile))
-        logs.append(self.entry("...exists: %s"%os.path.isfile(self.dbfile)))
+        logs.append(self.entry("DB file %s..." % self.dbfile))
+        logs.append(self.entry("...exists: %s" % os.path.isfile(self.dbfile)))
         logs.append(self.entry("Got connection ok..."))
         con = sqlite3.connect(self.dbfile)
         logs.append(self.entry(bool(con)))
@@ -102,36 +106,57 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         tables = [i[0] for i in cur.fetchall()]
         for table in self.schema:
             if table not in tables:
-                logs.append(self.entry("Table '%s' doesn't exist, creating."%table))
-                cur.execute('create table %s (%s)' % (table,
-                    ','.join(["%s %s"%(i[0],i[1]) for i in self.schema[table]])))
+                logs.append(self.entry("Table '%s' doesn't exist, creating." % table))
+                cur.execute(
+                    "create table %s (%s)"
+                    % (
+                        table,
+                        ",".join(["%s %s" % (i[0], i[1]) for i in self.schema[table]]),
+                    )
+                )
                 for i in self.schema[table]:
                     if len(i) > 2 and i[2]:
-                        cur.execute('create %s %s_%s_idx on %s (%s)' % (
-                            i[2],  # 'index' or 'unique index'
-                            table, i[0], table, i[0]))
+                        cur.execute(
+                            "create %s %s_%s_idx on %s (%s)"
+                            % (
+                                i[2],  # 'index' or 'unique index'
+                                table,
+                                i[0],
+                                table,
+                                i[0],
+                            )
+                        )
             else:
-                logs.append(self.entry("Table '%s' found ok"%table))
-                cur.execute("PRAGMA table_info(%s)"%table)
+                logs.append(self.entry("Table '%s' found ok" % table))
+                cur.execute("PRAGMA table_info(%s)" % table)
                 fields = [i[1] for i in cur.fetchall()]
-                for field,type_,index in [(i+(None,))[:3] for i in self.schema[table]]:
+                for field, type_, index in [
+                    (i + (None,))[:3] for i in self.schema[table]
+                ]:
                     if field not in fields:
 
                         logs.append(
-                            self.entry("Field '%s' doesn't exist, creating."%field))
-                        cur.execute('alter table %s add %s %s' % (table,
-                            field, type_))
+                            self.entry("Field '%s' doesn't exist, creating." % field)
+                        )
+                        cur.execute("alter table %s add %s %s" % (table, field, type_))
                         if index:
-                            cur.execute('create %s %s_%s_idx on %s (%s)' % (
-                                index,  # 'index' or 'unique index'
-                                table, field, table, field))
+                            cur.execute(
+                                "create %s %s_%s_idx on %s (%s)"
+                                % (
+                                    index,  # 'index' or 'unique index'
+                                    table,
+                                    field,
+                                    table,
+                                    field,
+                                )
+                            )
                         con.commit()
                     else:
-                        logs.append(self.entry("Field '%s' found ok"%field))
+                        logs.append(self.entry("Field '%s' found ok" % field))
 
-        self.out('\n'.join(logs))
+        self.out("\n".join(logs))
 
-        return 'logged'
+        return "logged"
 
     def log(self):
 
@@ -140,23 +165,23 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         if self.query:
             dat = urlparse.parse_qs(self.query)
-            tag,status = dat["proctype"][0].split("::")
-            if '/STATUS/' in status:
-                status = status.replace('/STATUS/', '')
+            tag, status = dat["proctype"][0].split("::")
+            if "/STATUS/" in status:
+                status = status.replace("/STATUS/", "")
             else:
-                status = 'INFO'
+                status = "INFO"
             message = dat["msg"][0]
         else:
             tag = args.pop(0)
-            if args and args[0] == 'status':
+            if args and args[0] == "status":
                 args.pop(0)  # discard 'status'
                 status = args.pop(0)
             else:
-                status = 'INFO'
+                status = "INFO"
             if args:
-                message = '/'.join(args)
+                message = "/".join(args)
             else:
-                message = '*no msg.*'
+                message = "*no msg.*"
 
         self.out(self.entry("'%s' says %s:%s" % (tag, status, message)))
 
@@ -164,13 +189,16 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
-        cur.execute("""insert into log (process, timestamp, status, message, ip)
-            values (?,?,?,?,?)""", 
-            [tag, timestamp, status, message, self.client_address[0]])
+        cur.execute(
+            """insert into log (process, timestamp, status, message, ip)
+            values (?,?,?,?,?)""",
+            [tag, timestamp, status, message, self.client_address[0]],
+        )
         con.commit()
+
     def out(self, s):
 
-        if self.args[0] != 'log' or self.query:
+        if self.args[0] != "log" or self.query:
             self.wfile.write(s)
 
     def quit(self):
@@ -178,45 +206,56 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.out(self.entry("TERMINATING"))
 
         # wait 1.0 seconds for the request to finish before ending
-        threading.Timer(1.0, lambda:self.server.shutdown()).start()
+        threading.Timer(1.0, lambda: self.server.shutdown()).start()
 
     def register(self):
 
         if self.query:
 
             dat = urlparse.parse_qs(self.query)
-            tag,dummy = dat["proctype"][0].split("::")
-            interval,description = dat["msg"][0].split("/",1)
+            tag, dummy = dat["proctype"][0].split("::")
+            interval, description = dat["msg"][0].split("/", 1)
 
         else:
 
             cmd, tag, interval = self.args[:3]
-            description = '/'.join(self.args[3:])
+            description = "/".join(self.args[3:])
 
         interval = float(interval)
 
-        self.out(self.entry("""Add/update '%s', "%s", interval=%f""" %
-            (tag, description, interval)))
+        self.out(
+            self.entry(
+                """Add/update '%s', "%s", interval=%f""" % (tag, description, interval)
+            )
+        )
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
-        cur.execute('select * from process where process=?', [tag])
+        cur.execute("select * from process where process=?", [tag])
         process = cur.fetchall()
         if process:
-            cur.execute("""update process set interval=?, description=?
-                where process=?""", [interval, description, tag])
+            cur.execute(
+                """update process set interval=?, description=?
+                where process=?""",
+                [interval, description, tag],
+            )
         else:
-            cur.execute("""insert into process (process, description, interval)
-                values (?,?,?)""", [tag, description, interval])
+            cur.execute(
+                """insert into process (process, description, interval)
+                values (?,?,?)""",
+                [tag, description, interval],
+            )
         con.commit()
+
     def setup(self):
 
         BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
 
         self.dbfile = os.path.join(
             os.path.dirname(sys.argv[0]),
-            os.path.splitext(os.path.basename(sys.argv[0]))[0]+'.sqlite')
+            os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".sqlite",
+        )
 
     def show(self):
 
@@ -226,10 +265,15 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
-        cur.execute("""select description, interval from process where process=?""", [tag])
+        cur.execute(
+            """select description, interval from process where process=?""", [tag]
+        )
         description = cur.fetchone()
         if not description:
-            description, interval = "*unregistered process, assuming 24h interval*", 24.
+            description, interval = (
+                "*unregistered process, assuming 24h interval*",
+                24.0,
+            )
         else:
             description, interval = description
             interval = float(interval)
@@ -237,56 +281,78 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if not interval:
             interval = 24.0
 
-        interval_td = datetime.timedelta(0,3600.*interval)
-        self.out('<h1>{process}: {intfmt} : {description}</h1>'.format(
-            process=tag, intfmt=self.td2str(interval_td), description=description))
+        interval_td = datetime.timedelta(0, 3600.0 * interval)
+        self.out(
+            "<h1>{process}: {intfmt} : {description}</h1>".format(
+                process=tag, intfmt=self.td2str(interval_td), description=description
+            )
+        )
 
-        cur.execute("""select * from log where process=? order by timestamp desc limit 20""", [tag])
+        cur.execute(
+            """select * from log where process=? order by timestamp desc limit 20""",
+            [tag],
+        )
         logs = reversed(cur.fetchall())
 
         for process, timestamp, status, message, ip in logs:
 
-            timestamp = timestamp.split('.')[0]  # drop fractional seconds, for now
-            timestamp = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+            timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
+            timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 
-            if status == 'FAIL':
-                status = 'HARD'
+            if status == "FAIL":
+                status = "HARD"
 
-            if status in ('DISABLE', 'ENABLE'):
+            if status in ("DISABLE", "ENABLE"):
                 message = "%s: %s" % (status, message)
-                
+
             self.out(self.entry(message, class_=status, ts=timestamp))
 
-        for i in '', '/STATUS/FAIL', '/STATUS/OK':
+        for i in "", "/STATUS/FAIL", "/STATUS/OK":
             uptype = i
-            type_=i.replace('STATUS', 'status')
-            self.out(self.template['manual'].format(
-                action='log', process=tag, type=type_, uptype=uptype, value=''))
+            type_ = i.replace("STATUS", "status")
+            self.out(
+                self.template["manual"].format(
+                    action="log", process=tag, type=type_, uptype=uptype, value=""
+                )
+            )
 
-        self.out(self.template['manual'].format(
-            action='register', process=tag, type='', uptype='',
-            value="%s/%s"%(interval,description)))
+        self.out(
+            self.template["manual"].format(
+                action="register",
+                process=tag,
+                type="",
+                uptype="",
+                value="%s/%s" % (interval, description),
+            )
+        )
+
     def show_help(self):
-        self.out(self.template['help'].format(path=self.path))
+        self.out(self.template["help"].format(path=self.path))
+
     def show_all(self):
         self.show_status(show_all=True)
+
     def td2str(self, sep):
         return "%dd%02d:%02d" % (
             sep.days,
-            sep.seconds//3600,
-            sep.seconds%3600//60,
+            sep.seconds // 3600,
+            sep.seconds % 3600 // 60,
             # sep.seconds%60
         )
+
     def show_status(self, show_all=False):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
-        cur.execute("""create temporary table last_msg as
+        cur.execute(
+            """create temporary table last_msg as
             select process, max(timestamp) as last from log
-            group by process""")
+            group by process"""
+        )
 
-        cur.execute("""
+        cur.execute(
+            """
             select process, 0, 'NEW', process.*, 'NEW', 'NEW' from
             process left join log using (process) where log.process is null
               and (description is null or description not like 'DEFUNCT:%')
@@ -294,18 +360,28 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             union
 
             select last_msg.process, last, message, process.*, status, ip from
-            last_msg 
+            last_msg
             join log on (last_msg.process = log.process and log.timestamp = last)
             left join process on (last_msg.process = process.process)
 
             where (description is null or description not like 'DEFUNCT:%')
 
             order by last
-            """)
+            """
+        )
 
-        for log_process, last, message, process, interval, description, status, ip in cur.fetchall():
-            
-            if status == 'DISABLE' and not show_all:
+        for (
+            log_process,
+            last,
+            message,
+            process,
+            interval,
+            description,
+            status,
+            ip,
+        ) in cur.fetchall():
+
+            if status == "DISABLE" and not show_all:
                 continue
 
             assumed_interval = False
@@ -314,101 +390,110 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 assumed_interval = True
 
             if not description:
-                description = '*unregistered process, assuming 24h interval*'
+                description = "*unregistered process, assuming 24h interval*"
 
-            details = ''
+            details = ""
 
-            sep = 3600.*interval
+            sep = 3600.0 * interval
             interval_txt = "%dd%dh%dm" % (
-                sep//(3600*24),
-                sep%(3600*24)//3600,
-                sep%3600//60
+                sep // (3600 * 24),
+                sep % (3600 * 24) // 3600,
+                sep % 3600 // 60,
             )
 
             if last != 0:
 
-                last = last.split('.')[0]  # drop fractional seconds, for now
+                last = last.split(".")[0]  # drop fractional seconds, for now
 
-                last_date = datetime.datetime.strptime(last, '%Y-%m-%d %H:%M:%S')
+                last_date = datetime.datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
 
                 now = datetime.datetime.now()
 
-                interval_td = datetime.timedelta(0,3600.*interval)
+                interval_td = datetime.timedelta(0, 3600.0 * interval)
 
                 due = last_date + interval_td
 
                 out_status = status
-                if now > due or status not in ('OK', 'DISABLE', 'ENABLE'):
-                    out_status = 'FAIL'
-                if status == 'FAIL':
-                    out_status = 'HARD'
+                if now > due or status not in ("OK", "DISABLE", "ENABLE"):
+                    out_status = "FAIL"
+                if status == "FAIL":
+                    out_status = "HARD"
 
                 if now > due:
-                    sep = now-due
-                    spare = '-'+self.td2str(sep)
+                    sep = now - due
+                    spare = "-" + self.td2str(sep)
                 else:
-                    sep = due-now
-                    spare = '+'+self.td2str(sep)
+                    sep = due - now
+                    spare = "+" + self.td2str(sep)
 
                 timestamp = last_date.strftime("%d&nbsp;%H:%M:%S")
-                
+
                 details = ", last %s, %s %s" % (
-                    last_date.strftime('%b %d %Y %H:%M'),
-                    'overdue' if now > due else 'due',
-                    due.strftime('%b %d %Y %H:%M'),
+                    last_date.strftime("%b %d %Y %H:%M"),
+                    "overdue" if now > due else "due",
+                    due.strftime("%b %d %Y %H:%M"),
                 )
-                    
+
             else:  # last == 0
 
-                spare = 'interval='+interval_txt
-                timestamp = last_date = 'NEVER'
-                out_status = 'FAIL'
-                
-            details = 'Every %s%s%s, %s' % (
+                spare = "interval=" + interval_txt
+                timestamp = last_date = "NEVER"
+                out_status = "FAIL"
+
+            details = "Every %s%s%s, %s" % (
                 interval_txt,
-                ' (assumed)' if assumed_interval else '',
-                details, ip
+                " (assumed)" if assumed_interval else "",
+                details,
+                ip,
             )
 
             log_process = "<a title=%s href=%s>%s</a> " % (
-                q(description), q('show/'+log_process), log_process)
+                q(description),
+                q("show/" + log_process),
+                log_process,
+            )
 
             self.out(
                 "<div class='ent'>"
                 "<span class='tag'>%s <span title='%s'class='ts %s'>%s </span> </span>"
                 " <span class='msg'> %s <span class='time'>%s</span></span>"
-                "</div>" % (log_process, details, out_status, timestamp, message, spare))
+                "</div>" % (log_process, details, out_status, timestamp, message, spare)
+            )
 
     schema = {
-        'process':
-        [('process', 'text', 'unique index'), ('interval', 'float'), 
-         ('description', 'text'), 
-         # ('active', 'boolean'), # ('test', 'test'), 
+        "process": [
+            ("process", "text", "unique index"),
+            ("interval", "float"),
+            ("description", "text"),
+            # ('active', 'boolean'), # ('test', 'test'),
         ],
-        'log':
-        [('process', 'text', 'index'), ('timestamp', 'datetime', 'index'),
-         ('status', 'text'), ('message', 'text'), ('ip', 'text')],
+        "log": [
+            ("process", "text", "index"),
+            ("timestamp", "datetime", "index"),
+            ("status", "text"),
+            ("message", "text"),
+            ("ip", "text"),
+        ],
     }
-    
+
     colors = {
-        'FAIL': 'pink',
-        'HARD': 'red',
-        'OK': '#afa',
-        'DISABLE': '#ccc',
-        'ENABLE': 'cyan',
+        "FAIL": "pink",
+        "HARD": "red",
+        "OK": "#afa",
+        "DISABLE": "#ccc",
+        "ENABLE": "cyan",
     }
     if 0:  # color-blind friendly version
         colors = {
-            'FAIL': 'yellow',
-            'HARD': 'orange',
-            'OK': '#aaf',
-            'DISABLE': '#ccc',
-            'ENABLE': '#afa',
+            "FAIL": "yellow",
+            "HARD": "orange",
+            "OK": "#aaf",
+            "DISABLE": "#ccc",
+            "ENABLE": "#afa",
         }
 
     template = {
-        'hdr':
-            """<html><head><style>
+        "hdr": """<html><head><style>
             body {{ font-family: sans-serif; font-size: 90%; }}
             .FAIL {{ background: {FAIL}; }}
             .HARD {{ background: {HARD}; }}
@@ -427,36 +512,31 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             <a href="/">Home</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
-            </div><hr/>""".format(**colors),
-
-        'ftr':
-            """</body></html>""",
-
-        'help':
-            """<pre>HELP</pre>
+            </div><hr/>""".format(
+            **colors
+        ),
+        "ftr": """</body></html>""",
+        "help": """<pre>HELP</pre>
             <pre>{path}</pre>""",
-
-        'manual':
-            """<form method="get" action="/{action}">
+        "manual": """<form method="get" action="/{action}">
             <div class='right'>/{action}/{process}{type}/<input name='msg' size='80'
               value='{value}'/>
             <input type='hidden' name='proctype' value='{process}::{uptype}'/></div>
-            </form>"""
+            </form>""",
     }
 
 
 class ThreadedServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     pass
 
-def run(server_class=BaseHTTPServer.HTTPServer,
-        handler_class=tattleRequestHandler):
 
-    server_address = ('0.0.0.0', 8111)
+def run(server_class=BaseHTTPServer.HTTPServer, handler_class=tattleRequestHandler):
+
+    server_address = ("0.0.0.0", 8111)
     httpd = server_class(server_address, handler_class)
 
     httpd.serve_forever()
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     run()
