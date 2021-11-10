@@ -6,17 +6,17 @@ import sqlite3
 import sys
 import threading
 import traceback
-import urllib
 import xml.sax.saxutils
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import BaseHTTPServer
-import SocketServer
-import urlparse
+from socketserver import ThreadingMixIn
+
+from urllib.parse import unquote, parse_qs
 
 q = xml.sax.saxutils.quoteattr
 
 
-class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class tattleRequestHandler(BaseHTTPRequestHandler):
     """
     tattle.py, dependency free simple batch monitoring system.
 
@@ -43,7 +43,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if "?" in self.path:
             self.path, self.query = self.path.split("?", 1)
 
-        path = urllib.unquote(self.path.strip("/ "))
+        path = unquote(self.path.strip("/ "))
         self.args = path.split("/")
 
         dispatch = {
@@ -164,7 +164,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         args.pop(0)  # discard command name
 
         if self.query:
-            dat = urlparse.parse_qs(self.query)
+            dat = parse_qs(self.query)
             tag, status = dat["proctype"][0].split("::")
             if "/STATUS/" in status:
                 status = status.replace("/STATUS/", "")
@@ -199,7 +199,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def out(self, s):
 
         if self.args[0] != "log" or self.query:
-            self.wfile.write(s)
+            self.wfile.write(s.encode("utf8"))
 
     def quit(self):
 
@@ -212,7 +212,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         if self.query:
 
-            dat = urlparse.parse_qs(self.query)
+            dat = parse_qs(self.query)
             tag, dummy = dat["proctype"][0].split("::")
             interval, description = dat["msg"][0].split("/", 1)
 
@@ -250,7 +250,7 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def setup(self):
 
-        BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
+        super().setup()
 
         self.dbfile = os.path.join(
             os.path.dirname(sys.argv[0]),
@@ -526,11 +526,11 @@ class tattleRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     }
 
 
-class ThreadedServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
+class ThreadedServer(ThreadingMixIn, HTTPServer):
     pass
 
 
-def run(server_class=BaseHTTPServer.HTTPServer, handler_class=tattleRequestHandler):
+def run(server_class=HTTPServer, handler_class=tattleRequestHandler):
 
     server_address = ("0.0.0.0", 8111)
     httpd = server_class(server_address, handler_class)
