@@ -6,19 +6,17 @@ import sqlite3
 import sys
 import threading
 import traceback
-import xml.sax.saxutils
+from xml.sax.saxutils import quoteattr
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from socketserver import ThreadingMixIn
 
 from urllib.parse import unquote, parse_qs
 
-q = xml.sax.saxutils.quoteattr
-
 
 class tattleRequestHandler(BaseHTTPRequestHandler):
     """
-    tattle.py, dependency free simple batch monitoring system.
+    tattle.py, dependency free simple status monitoring system.
 
     /
       show status of all processes
@@ -448,8 +446,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
 
             log_process = "<a title=%s href=%s>%s</a> " % (
-                q(description),
-                q("show/" + log_process),
+                quoteattr(description),
+                quoteattr("show/" + log_process),
                 log_process,
             )
 
