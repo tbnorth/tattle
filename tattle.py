@@ -4,7 +4,6 @@ import datetime
 import os
 import sqlite3
 import subprocess
-import sys
 import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -254,10 +253,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         super().setup()
 
-        self.dbfile = os.path.join(
-            os.path.dirname(sys.argv[0]),
-            os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".sqlite",
-        )
+        self.dbfile = "tattle.sqlite"
 
     def show(self):
 
@@ -489,7 +485,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def reports(self):
         """Show / serve reports"""
         if len(self.args) > 1:
-            self.out((Path("reports")/self.args[1]).read_text())
+            self.out((Path("reports") / self.args[1]).read_text())
         else:
             self.out(self.template["hdr"])
             for path in Path("reports").glob("*"):
@@ -499,7 +495,18 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 )
             self.out(self.template["ftr"])
 
+    colors = {  # not finished
+        "BACKGROUND": "black",
+        "FOREGROUND": "gray",
+        "FAIL": "pink",
+        "HARD": "red",
+        "OK": "#afa",
+        "DISABLE": "#ccc",
+        "ENABLE": "cyan",
+    }
     colors = {
+        "BACKGROUND": "white",
+        "FOREGROUND": "black",
         "FAIL": "pink",
         "HARD": "red",
         "OK": "#afa",
@@ -517,7 +524,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
     template = {
         "hdr": """<html><head><style>
-            body {{ font-family: sans-serif; font-size: 90%; }}
+            body {{ font-family: sans-serif; font-size: 90%;
+                   background: {BACKGROUND}; color: {FOREGROUND}; }}
             .FAIL {{ background: {FAIL}; }}
             .HARD {{ background: {HARD}; }}
             .OK {{ background: {OK}; }}
@@ -532,11 +540,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             a:hover {{ text-decoration: underline; color: red }}
             .right {{ text-align: right }}
             </style></head><body><div>
-            <a href="/">Home</a>
-            <a href="/all">Show disabled</a>
-            <a href="/quit">Re-start</a>
-            <a href="/update">Get updates</a>
-            <a href="/report">Reports</a>
+            <a href="/"><button>Home</button></a>
+            <a href="/all"><button>Show disabled</button></a>
+            <a href="/quit"><button>Re-start</button></a>
+            <a href="/update"><button>Get updates</button></a>
+            <a href="/report"><button>Reports</button></a>
             </div><hr/>""".format(
             **colors
         ),
