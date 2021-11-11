@@ -81,7 +81,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/plain")
             self.end_headers()
-            self.wfile.write("%s ACKNOWLEDGED\n" % path)
+            self.wfile.write(f"{path} ACKNOWLEDGED\n".encode("utf8"))
 
     def entry(self, s, class_="", ts=None, prefix=""):
         if class_.strip():
@@ -417,7 +417,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
                 out_status = status
                 if now > due or status not in ("OK", "DISABLE", "ENABLE"):
-                    out_status = "FAIL"
+                    out_status = "HARD" if description.strip()[-1] == "*" else "FAIL"
                 if status == "FAIL":
                     out_status = "HARD"
 
