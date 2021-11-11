@@ -3,15 +3,15 @@
 import datetime
 import os
 import sqlite3
+import subprocess
 import sys
 import threading
 import traceback
-from xml.sax.saxutils import quoteattr
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
+from pathlib import Path
 from socketserver import ThreadingMixIn
-
-from urllib.parse import unquote, parse_qs
+from urllib.parse import parse_qs, unquote
+from xml.sax.saxutils import quoteattr
 
 
 class tattleRequestHandler(BaseHTTPRequestHandler):
@@ -35,8 +35,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
 
-        self.args = [""]
-
         self.query = None
         if "?" in self.path:
             self.path, self.query = self.path.split("?", 1)
@@ -53,7 +51,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             "register": self.register,
             "log": self.log,
             "show": self.show,
+            "update": self.update,
+            "report": self.reports,
         }
+        paths_no_template = ["report"]
+        use_template = self.args[0] not in paths_no_template
 
         if self.args[0] != "log" or self.query:
             self.send_response(200)
@@ -62,7 +64,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         # self.out does nothing when self.args[0] == 'log'
 
-        self.out(self.template["hdr"])
+        if use_template:
+            self.out(self.template["hdr"])
         try:
             if self.args and self.args[0] in dispatch:
                 dispatch[self.args[0]]()
@@ -71,7 +74,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             self.out("<pre>%s</pre>" % traceback.format_exc())
             raise
-        self.out(self.template["ftr"])
+        if use_template:
+            self.out(self.template["ftr"])
 
         if self.args[0] == "log" and not self.query:
             self.send_response(200)
@@ -474,6 +478,27 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         ],
     }
 
+    def update(self):
+        """Make a system call to run `tattle_update` in the background.
+
+        tattle_update needs to be executable and on the path.
+        """
+        subprocess.run("tattle_update &", shell=True)
+        self.out("<p><code>tattle_update</code> called.</p>")
+
+    def reports(self):
+        """Show / serve reports"""
+        if len(self.args) > 1:
+            self.out((Path("reports")/self.args[1]).read_text())
+        else:
+            self.out(self.template["hdr"])
+            for path in Path("reports").glob("*"):
+                self.out(
+                    "<div><a target='blank' "
+                    f"href='/report/{path.name}'>{path.name}</a></div>"
+                )
+            self.out(self.template["ftr"])
+
     colors = {
         "FAIL": "pink",
         "HARD": "red",
@@ -510,6 +535,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             <a href="/">Home</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
+            <a href="/update">Get updates</a>
+            <a href="/report">Reports</a>
             </div><hr/>""".format(
             **colors
         ),
