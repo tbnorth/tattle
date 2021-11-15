@@ -30,7 +30,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
       repeating ok, just changes interval and description
     /log/<process>/msg. text
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
+    /log/<process>/status/DEFER/<hours>
     """
+
+    statuses = "OK", "FAIL", "DISABLE", "ENABLE", "DEFER", "DEFUNCT"
 
     def do_GET(self):
 
@@ -305,7 +308,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             self.out(self.entry(message, class_=status, ts=timestamp))
 
-        for i in "", "/STATUS/FAIL", "/STATUS/OK":
+        for i in "", "/STATUS/FAIL", "/STATUS/OK", "/STATUS/DEFER":
             uptype = i
             type_ = i.replace("STATUS", "status")
             self.out(
@@ -338,15 +341,39 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             # sep.seconds%60
         )
 
+    def delete_defers(self, con, cur):
+        """Delete DEFER status if expired.  If *any* DEFER has expired, delete *all*
+        DEFERs for that process, so you can DEFER a lower number later."""
+        cur.execute(
+            "select process, timestamp, min(cast(message as real)) as ttl "
+            "from log where status = 'DEFER'"
+        )
+        for process, timestamp, ttl in cur:
+            if not timestamp:
+                continue  # None, None, None possible
+            timestamp = timestamp.split(".")[0]  # drop fractional seconds
+            timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+            elapsed = (datetime.datetime.now() - timestamp).total_seconds() / 3600
+            if elapsed > ttl:
+                con.execute(
+                    "delete from log where status = 'DEFER' and process = ?", [process]
+                )
+                con.commit()
+
     def show_status(self, show_all=False):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
+        self.delete_defers(con, cur)
+
+        # (?, ?, ?) for statuses
+        in_clause = "(" + ",".join("?" * len(self.statuses)) + ")"
         cur.execute(
-            """create temporary table last_msg as
-            select process, max(timestamp) as last from log
-            group by process"""
+            f"""create temporary table last_msg as
+            select process, max(timestamp) as last from log where status in {in_clause}
+            group by process""",
+            self.statuses,
         )
 
         cur.execute(
@@ -412,7 +439,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 due = last_date + interval_td
 
                 out_status = status
-                if now > due or status not in ("OK", "DISABLE", "ENABLE"):
+                if status != "DEFER" and (
+                    now > due or status not in ("OK", "DISABLE", "ENABLE")
+                ):
                     out_status = "HARD" if description.strip()[-1] == "*" else "FAIL"
                 if status == "FAIL":
                     out_status = "HARD"
