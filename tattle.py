@@ -524,15 +524,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 )
             self.out(self.template["ftr"])
 
-    colors = {  # not finished
-        "BACKGROUND": "black",
-        "FOREGROUND": "gray",
-        "FAIL": "pink",
-        "HARD": "red",
-        "OK": "#afa",
-        "DISABLE": "#ccc",
-        "ENABLE": "cyan",
-    }
     colors = {
         "BACKGROUND": "white",
         "FOREGROUND": "black",
@@ -540,6 +531,15 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         "HARD": "red",
         "OK": "#afa",
         "DISABLE": "#ccc",
+        "ENABLE": "cyan",
+    }
+    colors = {  # not finished
+        "BACKGROUND": "black",
+        "FOREGROUND": "#ccc",
+        "FAIL": "#6c71c4",
+        "HARD": "#d33682",
+        "OK": "#859900",
+        "DISABLE": "#2aa198",
         "ENABLE": "cyan",
     }
     if 0:  # color-blind friendly version
@@ -565,15 +565,17 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .msg {{ display: block; float: left; width: 59%; padding-left: 1%;}}
             .ts {{ color: blue; font-size: 75%; }}
             .time {{ font-size: 75%; font-style: italic; }}
-            a {{ text-decoration: none; }}
+            a {{ text-decoration: none; color: {FOREGROUND}; }}
+            a:active {{ text-decoration: none; color: {FOREGROUND}; }}
+            a:visited {{ text-decoration: none; color: {FOREGROUND}; }}
             a:hover {{ text-decoration: underline; color: red }}
             .right {{ text-align: right }}
             </style></head><body><div>
-            <a href="/"><button>Home</button></a>
-            <a href="/all"><button>Show disabled</button></a>
-            <a href="/quit"><button>Re-start</button></a>
-            <a href="/update"><button>Get updates</button></a>
-            <a href="/report"><button>Reports</button></a>
+            <a href="/">Home</a>
+            <a href="/all">Show disabled</a>
+            <a href="/quit">Re-start</a>
+            <a href="/update">Get updates</a>
+            <a href="/report">Reports</a>
             </div><hr/>""".format(
             **colors
         ),
