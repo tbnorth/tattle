@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import traceback
+from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -26,12 +27,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
       create database if needed, with feedback
     /test/
       self test (same as init)
-    /register/<process>/<hours>/description text
-      register a process with tag <process> which should report ever <hours> hours
+    /register/<process>/<seconds>/description text
+      register a process with tag <process> which should report ever <seconds> seconds
       repeating ok, just changes interval and description
     /log/<process>/msg. text
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
-    /log/<process>/status/DEFER/<hours>
+    /log/<process>/status/DEFER/<seconds>
     """
 
     statuses = "OK", "FAIL", "DISABLE", "ENABLE", "DEFER", "DEFUNCT"
@@ -227,6 +228,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         # wait 1.0 seconds for the request to finish before ending
         threading.Timer(1.0, lambda: self.server.shutdown()).start()
 
+    _hms = {"d": 3600 * 24, "h": 3600, "m": 60, "s": 1}
+
+    @classmethod
+    def hms_to_s(cls, hms: str) -> float:
+        """Convert 0d1h2m3.5s to 3723.5"""
+        total = 0
+        part = ""
+        hms = list(hms)
+        while hms:
+            char = hms.pop(0)
+            if char in cls._hms:
+                total += float(part) * cls._hms[char]
+                part = ""
+            else:
+                part += char
+        if part:
+            total += float(part)
+        return total
+
     def register(self):
 
         if self.query:
@@ -240,7 +260,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             cmd, tag, interval = self.args[:3]
             description = "/".join(self.args[3:])
 
-        interval = float(interval)
+        interval = self.hms_to_s(interval)
 
         self.out(
             self.entry(
@@ -286,18 +306,16 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         )
         description = cur.fetchone()
         if not description:
-            description, interval = (
-                "*unregistered process, assuming 24h interval*",
-                24.0,
-            )
+            description = "*unregistered process, assuming 5m interval*"
+            interval = 300
         else:
             description, interval = description
             interval = float(interval)
 
         if not interval:
-            interval = 24.0
+            interval = 300
 
-        interval_td = datetime.timedelta(0, 3600.0 * interval)
+        interval_td = datetime.timedelta(0, interval)
         self.out(
             "<h1>{process}: {intfmt} : {description}</h1>".format(
                 process=tag, intfmt=self.td2str(interval_td), description=description
@@ -338,7 +356,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 process=tag,
                 type="",
                 uptype="",
-                value="%s/%s" % (interval, description),
+                value="%s/%s" % (self.td2str(interval, exact=True), description),
             )
         )
 
@@ -348,13 +366,20 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def show_all(self):
         self.show_status(show_all=True)
 
-    def td2str(self, sep):
-        return "%dd%02d:%02d" % (
-            sep.days,
-            sep.seconds // 3600,
-            sep.seconds % 3600 // 60,
-            # sep.seconds%60
-        )
+    def td2str(self, sep, exact=False):
+        if not isinstance(sep, timedelta):
+            sep = timedelta(seconds=float(sep))
+        total = sep.total_seconds()
+        sep = total
+        rep = []
+        for key, amount in self._hms.items():
+            step = sep if key == "s" else sep // amount
+            if step:
+                rep.append(f"{step:02.0f}{key}")
+                sep -= step * amount
+                if not exact and sep / total < 0.1:
+                    break
+        return "".join(rep).lstrip("0")
 
     def delete_defers(self, con, cur):
         """Delete DEFER status if expired.  If *any* DEFER has expired, delete *all*
@@ -434,12 +459,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             details = ""
 
-            sep = 3600.0 * interval
-            interval_txt = "%dd%dh%dm" % (
-                sep // (3600 * 24),
-                sep % (3600 * 24) // 3600,
-                sep % 3600 // 60,
-            )
+            interval_txt = self.td2str(interval)
 
             if last != 0:
 
@@ -449,7 +469,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
                 now = datetime.datetime.now()
 
-                interval_td = datetime.timedelta(0, 3600.0 * interval)
+                interval_td = datetime.timedelta(0, interval)
 
                 due = last_date + interval_td
 
