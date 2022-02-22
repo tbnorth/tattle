@@ -627,6 +627,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             a:hover {{ text-decoration: underline; color: red }}
             .right {{ text-align: right }}
             .time {{ clear: left; }}
+            hr {{ border-style: solid; border-color: grey; border-width: 2px 0 0 0 ; }}
             </style>
             <title>Tattle</title>
             </head><body><div>
