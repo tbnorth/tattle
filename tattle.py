@@ -556,12 +556,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         tattle_update needs to be executable and on the path.
         """
-        subprocess.run(
+        subprocess.Popen(
             "tattle_update &",
+            close_fds=True,
             shell=True,
-            stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
         )
         self.out("<p><code>tattle_update</code> called.</p>")
 
