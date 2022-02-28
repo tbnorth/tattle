@@ -558,10 +558,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         """
         subprocess.Popen(
             "tattle_update &",
-            close_fds=True,
             shell=True,
             stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
         )
         self.out("<p><code>tattle_update</code> called.</p>")
