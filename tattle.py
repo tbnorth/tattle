@@ -5,7 +5,9 @@ import os
 import sqlite3
 import subprocess
 import threading
+import time
 import traceback
+from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -25,15 +27,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
       create database if needed, with feedback
     /test/
       self test (same as init)
-    /register/<process>/<hours>/description text
-      register a process with tag <process> which should report ever <hours> hours
+    /register/<process>/<seconds>/description text
+      register a process with tag <process> which should report ever <seconds> seconds
       repeating ok, just changes interval and description
     /log/<process>/msg. text
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
-    /log/<process>/status/DEFER/<hours>
+    /log/<process>/status/DEFER/<seconds>
     """
 
     statuses = "OK", "FAIL", "DISABLE", "ENABLE", "DEFER", "DEFUNCT"
+    status_level = {
+        "OK": 0,
+        "FAIL": 1,
+        "DISABLE": 0,
+        "ENABLEL": 0,
+        "DEFER": 0,
+        "DEFUNCT": 0,
+        "HARD": 2,
+    }
+    levels = "clr", "mix", "bad"  # favicon path fragment by error severity
 
     def do_GET(self):
 
@@ -55,13 +67,16 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             "show": self.show,
             "update": self.update,
             "report": self.reports,
+            "favicon.ico": self.favicon,
         }
-        paths_no_template = ["report"]
+        paths_no_template = ["report", "favicon.ico"]
         use_template = self.args[0] not in paths_no_template
 
         if self.args[0] != "log" or self.query:
             self.send_response(200)
             self.send_header("Content-type", "text/html")
+            if "Host" in self.headers:
+                self.send_header("Refresh", "70; url=//%s" % self.headers["Host"])
             self.end_headers()
 
         # self.out does nothing when self.args[0] == 'log'
@@ -77,11 +92,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             self.out("<pre>%s</pre>" % traceback.format_exc())
             raise
         if use_template:
-            self.out(self.template["ftr"])
+            self.out(self.template["ftr"].format(time=time.asctime()))
 
         if self.args[0] == "log" and not self.query:
             self.send_response(200)
             self.send_header("Content-type", "text/plain")
+
             self.end_headers()
             self.wfile.write(f"{path} ACKNOWLEDGED\n".encode("utf8"))
 
@@ -203,7 +219,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def out(self, s):
 
         if self.args[0] != "log" or self.query:
-            self.wfile.write(s.encode("utf8"))
+            self.wfile.write(s.encode("utf8") if isinstance(s, str) else s)
 
     def quit(self):
 
@@ -211,6 +227,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         # wait 1.0 seconds for the request to finish before ending
         threading.Timer(1.0, lambda: self.server.shutdown()).start()
+
+    _hms = {"d": 3600 * 24, "h": 3600, "m": 60, "s": 1}
+
+    @classmethod
+    def hms_to_s(cls, hms: str) -> float:
+        """Convert 0d1h2m3.5s to 3723.5"""
+        total = 0
+        part = ""
+        hms = list(hms)
+        while hms:
+            char = hms.pop(0)
+            if char in cls._hms:
+                total += float(part) * cls._hms[char]
+                part = ""
+            else:
+                part += char
+        if part:
+            total += float(part)
+        return total
 
     def register(self):
 
@@ -225,7 +260,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             cmd, tag, interval = self.args[:3]
             description = "/".join(self.args[3:])
 
-        interval = float(interval)
+        interval = self.hms_to_s(interval)
 
         self.out(
             self.entry(
@@ -271,18 +306,16 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         )
         description = cur.fetchone()
         if not description:
-            description, interval = (
-                "*unregistered process, assuming 24h interval*",
-                24.0,
-            )
+            description = "*unregistered process, assuming 5m interval*"
+            interval = 300
         else:
             description, interval = description
             interval = float(interval)
 
         if not interval:
-            interval = 24.0
+            interval = 300
 
-        interval_td = datetime.timedelta(0, 3600.0 * interval)
+        interval_td = datetime.timedelta(0, interval)
         self.out(
             "<h1>{process}: {intfmt} : {description}</h1>".format(
                 process=tag, intfmt=self.td2str(interval_td), description=description
@@ -323,7 +356,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 process=tag,
                 type="",
                 uptype="",
-                value="%s/%s" % (interval, description),
+                value="%s/%s" % (self.td2str(interval, exact=True), description),
             )
         )
 
@@ -333,13 +366,20 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def show_all(self):
         self.show_status(show_all=True)
 
-    def td2str(self, sep):
-        return "%dd%02d:%02d" % (
-            sep.days,
-            sep.seconds // 3600,
-            sep.seconds % 3600 // 60,
-            # sep.seconds%60
-        )
+    def td2str(self, sep, exact=False):
+        if not isinstance(sep, timedelta):
+            sep = timedelta(seconds=float(sep))
+        total = sep.total_seconds()
+        sep = total
+        rep = []
+        for key, amount in self._hms.items():
+            step = sep if key == "s" else sep // amount
+            if step:
+                rep.append(f"{step:02.0f}{key}")
+                sep -= step * amount
+                if not exact and sep / total < 0.1:
+                    break
+        return "".join(rep).lstrip("0")
 
     def delete_defers(self, con, cur):
         """Delete DEFER status if expired.  If *any* DEFER has expired, delete *all*
@@ -360,7 +400,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 )
                 con.commit()
 
-    def show_status(self, show_all=False):
+    def get_status(self, show_all=False):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
@@ -419,12 +459,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             details = ""
 
-            sep = 3600.0 * interval
-            interval_txt = "%dd%dh%dm" % (
-                sep // (3600 * 24),
-                sep % (3600 * 24) // 3600,
-                sep % 3600 // 60,
-            )
+            interval_txt = self.td2str(interval)
 
             if last != 0:
 
@@ -434,7 +469,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
                 now = datetime.datetime.now()
 
-                interval_td = datetime.timedelta(0, 3600.0 * interval)
+                interval_td = datetime.timedelta(0, interval)
 
                 due = last_date + interval_td
 
@@ -479,12 +514,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 quoteattr("show/" + log_process),
                 log_process,
             )
+            yield {
+                "part": dict(
+                    log_process=log_process,
+                    details=details,
+                    out_status=out_status,
+                    timestamp=timestamp,
+                    message=message,
+                    spare=spare,
+                )
+            }
 
+    def show_status(self, show_all=False):
+        for status in self.get_status(show_all=show_all):
             self.out(
                 "<div class='ent'>"
-                "<span class='tag'>%s <span title='%s'class='ts %s'>%s </span> </span>"
-                " <span class='msg'> %s <span class='time'>%s</span></span>"
-                "</div>" % (log_process, details, out_status, timestamp, message, spare)
+                "<span class='tag'>{log_process} <span title='{details}' "
+                "class='ts {out_status}'>{timestamp} </span> </span>"
+                " <span class='msg'> {message} <span class='time'>{spare}</span></span>"
+                "</div>".format_map(status["part"])
             )
 
     schema = {
@@ -508,7 +556,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         tattle_update needs to be executable and on the path.
         """
-        subprocess.run("tattle_update &", shell=True)
+        subprocess.Popen(
+            "tattle_update &",
+            shell=True,
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+        )
         self.out("<p><code>tattle_update</code> called.</p>")
 
     def reports(self):
@@ -522,7 +575,15 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     "<div><a target='blank' "
                     f"href='/report/{path.name}'>{path.name}</a></div>"
                 )
-            self.out(self.template["ftr"])
+            self.out(self.template["ftr"].format(time=time.asctime()))
+
+    def favicon(self):
+        """Based on current status"""
+        level = 0
+        for status in self.get_status():
+            level = max(level, self.status_level[status["part"]["out_status"]])
+        path = Path(__file__).with_name("favicon_" + self.levels[level] + ".ico")
+        self.out(path.read_bytes())
 
     colors = {
         "BACKGROUND": "white",
@@ -570,7 +631,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             a:visited {{ text-decoration: none; color: {FOREGROUND}; }}
             a:hover {{ text-decoration: underline; color: red }}
             .right {{ text-align: right }}
-            </style></head><body><div>
+            .time {{ clear: left; }}
+            hr {{ border-style: solid; border-color: grey; border-width: 2px 0 0 0 ; }}
+            </style>
+            <title>Tattle</title>
+            </head><body><div>
             <a href="/">Home</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
@@ -579,7 +644,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             </div><hr/>""".format(
             **colors
         ),
-        "ftr": """</body></html>""",
+        "ftr": """<div class='time'>{time}</div></body></html>""",
         "help": """<pre>HELP</pre>
             <pre>{path}</pre>""",
         "manual": """<form method="get" action="/{action}">
