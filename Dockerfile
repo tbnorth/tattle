@@ -3,7 +3,7 @@ FROM python:3.9-alpine
 EXPOSE 8111
 
 RUN apk update \
- && apk add git
+ && apk add bash git
 
 WORKDIR '/data'
 
