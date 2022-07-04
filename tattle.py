@@ -659,7 +659,7 @@ class ThreadedServer(ThreadingMixIn, HTTPServer):
     pass
 
 
-def run(server_class=HTTPServer, handler_class=tattleRequestHandler):
+def run(server_class=ThreadedServer, handler_class=tattleRequestHandler):
 
     server_address = ("0.0.0.0", 8111)
     httpd = server_class(server_address, handler_class)
