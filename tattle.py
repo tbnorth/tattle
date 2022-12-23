@@ -27,6 +27,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
       create database if needed, with feedback
     /test/
       self test (same as init)
+    /archive/
+      archive all but last 100 logs for each process, vacuum DB
     /register/<process>/<seconds>/description text
       register a process with tag <process> which should report ever <seconds> seconds
       repeating ok, just changes interval and description
@@ -59,6 +61,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         dispatch = {
             "": self.show_status,
             "all": self.show_all,
+            "archive": self.archive,
             "quit": self.quit,
             "test": self.init,
             "init": self.init,
@@ -111,6 +114,43 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             ts = ts.strftime("%d %H:%M:%S")
 
         return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
+
+    def archive(self):
+
+        keep = 100
+
+        self.out(self.entry("DB file %s..." % self.dbfile))
+        self.out(self.entry("...exists: %s" % os.path.isfile(self.dbfile)))
+        self.out(self.entry("Got connection ok..."))
+        con = sqlite3.connect(self.dbfile)
+        self.out(self.entry(bool(con)))
+        cur = con.cursor()
+        for proc in [i[0] for i in cur.execute("SELECT process FROM process")]:
+            last = list(
+                cur.execute(
+                    "select timestamp from log where process = ? "
+                    "order by timestamp desc limit ?",
+                    [proc, keep],
+                )
+            )
+            if len(last) == keep:
+                mintime = last[-1][0]
+                self.out(self.entry("%s %s" % (proc, mintime)))
+                cur.execute(
+                    "insert into old_data select * from log where process = "
+                    "? and timestamp < ?",
+                    [proc, mintime],
+                )
+                cur.execute(
+                    "delete from log where process = ? and timestamp < ?",
+                    [proc, mintime],
+                )
+        con.commit()
+        self.out(self.entry("Vacuuming"))
+        con.execute("vacuum")
+        self.out(self.entry("Vacuuming done"))
+
+        return "logged"
 
     def init(self):
 
