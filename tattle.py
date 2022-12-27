@@ -249,8 +249,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
+        table = "defer" if status == "DEFER" else "log"
         cur.execute(
-            """insert into log (process, timestamp, status, message, ip)
+            f"""insert into {table} (process, timestamp, status, message, ip)
             values (?,?,?,?,?)""",
             [tag, timestamp, status, message, self.client_address[0]],
         )
@@ -426,7 +427,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         DEFERs for that process, so you can DEFER a lower number later."""
         cur.execute(
             "select process, timestamp, min(cast(message as real)) as ttl "
-            "from log where status = 'DEFER'"
+            "from defer where status = 'DEFER'"
         )
         for process, timestamp, ttl in cur:
             if not timestamp:
@@ -436,7 +437,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             elapsed = (datetime.datetime.now() - timestamp).total_seconds() / 3600
             if elapsed > ttl:
                 con.execute(
-                    "delete from log where status = 'DEFER' and process = ?", [process]
+                    "delete from defer where status = 'DEFER' and process = ?",
+                    [process],
                 )
                 con.commit()
 
@@ -446,6 +448,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         cur = con.cursor()
 
         self.delete_defers(con, cur)
+        cur.execute("select distinct process from defer")
+        defered = [i[0] for i in cur]
 
         # (?, ?, ?) for statuses
         in_clause = "(" + ",".join("?" * len(self.statuses)) + ")"
@@ -488,6 +492,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             if status == "DISABLE" and not show_all:
                 continue
+            if process in defered:
+                status = "DEFER"
 
             assumed_interval = False
             if not interval:
@@ -590,6 +596,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             ("ip", "text"),
         ],
     }
+    schema["old_data"] = schema["log"]
+    schema["defer"] = schema["log"]
 
     def update(self):
         """Make a system call to run `tattle_update` in the background.
