@@ -50,7 +50,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     levels = "clr", "mix", "bad"  # favicon path fragment by error severity
 
     def do_GET(self):
-
         self.query = None
         if "?" in self.path:
             self.path, self.query = self.path.split("?", 1)
@@ -116,7 +115,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
 
     def archive(self):
-
         keep = 100
 
         self.out(self.entry("DB file %s..." % self.dbfile))
@@ -153,7 +151,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "logged"
 
     def init(self):
-
         logs = []
 
         logs.append(self.entry("DB file %s..." % self.dbfile))
@@ -194,7 +191,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     (i + (None,))[:3] for i in self.schema[table]
                 ]:
                     if field not in fields:
-
                         logs.append(
                             self.entry("Field '%s' doesn't exist, creating." % field)
                         )
@@ -219,7 +215,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "logged"
 
     def log(self):
-
         args = self.args[:]
         args.pop(0)  # discard command name
 
@@ -258,12 +253,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con.commit()
 
     def out(self, s):
-
         if self.args[0] != "log" or self.query:
             self.wfile.write(s.encode("utf8") if isinstance(s, str) else s)
 
     def quit(self):
-
         self.out(self.entry("TERMINATING"))
 
         # wait 1.0 seconds for the request to finish before ending
@@ -289,15 +282,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return total
 
     def register(self):
-
         if self.query:
-
             dat = parse_qs(self.query)
             tag, dummy = dat["proctype"][0].split("::")
             interval, description = dat["msg"][0].split("/", 1)
 
         else:
-
             cmd, tag, interval = self.args[:3]
             description = "/".join(self.args[3:])
 
@@ -329,13 +319,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con.commit()
 
     def setup(self):
-
         super().setup()
 
         self.dbfile = "tattle.sqlite"
 
     def show(self):
-
         args = self.args[:]
         args.pop(0)  # discard command name
         tag = args.pop(0)
@@ -367,10 +355,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             """select * from log where process=? order by timestamp desc limit 20""",
             [tag],
         )
-        logs = reversed(cur.fetchall())
+        logs = list(reversed(cur.fetchall()))
 
         for process, timestamp, status, message, ip in logs:
-
             timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
             timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 
@@ -381,6 +368,24 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 message = "%s: %s" % (status, message)
 
             self.out(self.entry(message, class_=status, ts=timestamp))
+
+        self.out("<p/>")
+        for status in "OK", "FAIL":
+            if logs[-1][2] != status:
+                cur.execute(
+                    "select * from log where process=? and status=? "
+                    "order by timestamp desc limit 20",
+                    [tag, status],
+                )
+                log = cur.fetchall()
+                if log:
+                    process, timestamp, status_, message, ip = log[0]
+                    self.out(
+                        f"<div>Last {status}</div>"
+                        + self.entry(message, class_=status_, ts=timestamp)
+                    )
+                else:
+                    self.out(f"(no earlier {status} entries)")
 
         for i in "", "/STATUS/FAIL", "/STATUS/OK", "/STATUS/DEFER":
             uptype = i
@@ -443,7 +448,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 con.commit()
 
     def get_status(self, show_all=False):
-
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
@@ -489,7 +493,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             status,
             ip,
         ) in cur.fetchall():
-
             if status == "DISABLE" and not show_all:
                 continue
             if process in defered:
@@ -508,7 +511,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             interval_txt = self.td2str(interval)
 
             if last != 0:
-
                 last = last.split(".")[0]  # drop fractional seconds, for now
 
                 last_date = datetime.datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
@@ -543,7 +545,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 )
 
             else:  # last == 0
-
                 spare = "interval=" + interval_txt
                 timestamp = last_date = "NEVER"
                 out_status = "FAIL"
@@ -708,7 +709,6 @@ class ThreadedServer(ThreadingMixIn, HTTPServer):
 
 
 def run(server_class=ThreadedServer, handler_class=tattleRequestHandler):
-
     server_address = ("0.0.0.0", 8111)
     httpd = server_class(server_address, handler_class)
 
