@@ -378,6 +378,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     [tag, status],
                 )
                 log = cur.fetchall()
+                if not log:
+                    cur.execute(
+                        "select * from old_data where process=? and status=? "
+                        "order by timestamp desc limit 20",
+                        [tag, status],
+                    )
+                    log = cur.fetchall()
                 if log:
                     process, timestamp, status_, message, ip = log[0]
                     self.out(
