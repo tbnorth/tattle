@@ -239,6 +239,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 message = "*no msg.*"
 
         self.out(self.entry("'%s' says %s:%s" % (tag, status, message)))
+        self.show_status()
 
         timestamp = datetime.datetime.now()
 
