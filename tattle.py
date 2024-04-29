@@ -715,7 +715,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     }
 
 
-class ThreadedServer(ThreadingMixIn, HTTPServer):
+# class ThreadedServer(ThreadingMixIn, HTTPServer):
+class ThreadedServer(HTTPServer):
     pass
 
 
