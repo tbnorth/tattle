@@ -16,8 +16,7 @@ from xml.sax.saxutils import quoteattr
 
 
 class tattleRequestHandler(BaseHTTPRequestHandler):
-    """
-    tattle.py, dependency free simple status monitoring system.
+    """tattle.py, dependency free simple status monitoring system.
 
     /
       show status of all processes
@@ -246,12 +245,17 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
         table = "defer" if status == "DEFER" else "log"
-        cur.execute(
-            f"""insert into {table} (process, timestamp, status, message, ip)
-            values (?,?,?,?,?)""",
-            [tag, timestamp, status, message, self.client_address[0]],
-        )
-        con.commit()
+        for attempt in range(5):
+            time.sleep(3 * attempt)
+            try:
+                cur.execute(
+                    f"""insert into {table} (process, timestamp, status, message, ip)
+                    values (?,?,?,?,?)""",
+                    [tag, timestamp, status, message, self.client_address[0]],
+                )
+                con.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def out(self, s):
         if self.args[0] != "log" or self.query:
@@ -437,7 +441,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
     def delete_defers(self, con, cur):
         """Delete DEFER status if expired.  If *any* DEFER has expired, delete *all*
-        DEFERs for that process, so you can DEFER a lower number later."""
+        DEFERs for that process, so you can DEFER a lower number later.
+        """
         cur.execute(
             "select process, timestamp, min(cast(message as real)) as ttl "
             "from defer where status = 'DEFER'"
@@ -698,9 +703,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             <a href="/quit">Re-start</a>
             <a href="/update">Get updates</a>
             <a href="/report">Reports</a>
-            </div><hr/>""".format(
-            **colors
-        ),
+            </div><hr/>""".format(**colors),
         "ftr": """<div class='time'>{time}</div></body></html>""",
         "help": """<pre>HELP</pre>
             <pre>{path}</pre>""",
