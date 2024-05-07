@@ -137,9 +137,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         cur.execute("SELECT process FROM process")
         for proc in [i[0] for i in list(cur)]:
             last = list(
-                execute_retry(
-                    con,
-                    cur,
+                    cur.execute(
                     "select timestamp from log where process = ? "
                     "order by timestamp desc limit ?",
                     [proc, keep],
