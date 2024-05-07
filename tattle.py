@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import random
 import sqlite3
 import subprocess
 import threading
@@ -246,7 +247,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         cur = con.cursor()
         table = "defer" if status == "DEFER" else "log"
         for attempt in range(5):
-            time.sleep(3 * attempt)
+            time.sleep(3 * attempt + 5 * random.random())
             try:
                 cur.execute(
                     f"""insert into {table} (process, timestamp, status, message, ip)
