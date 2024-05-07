@@ -134,9 +134,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         self.out(self.entry(bool(con)))
         cur = con.cursor()
-        for proc in [
-            i[0] for i in list(cur.execute("SELECT process FROM process"))
-        ]:
+        cur.execute("SELECT process FROM process")
+        for proc in [i[0] for i in list(cur)]:
             last = list(
                 execute_retry(
                     con,
