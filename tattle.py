@@ -16,6 +16,16 @@ from urllib.parse import parse_qs, unquote
 from xml.sax.saxutils import quoteattr
 
 
+def execute_retry(con, cur, query, args=None):
+    args = [] if args is None else args
+    for attempt in range(5):
+        try:
+            cur.execute(query, args)
+            con.commit()
+        except sqlite3.OperationalError:
+            time.sleep(3 * attempt + 5 * random.random())
+
+
 class tattleRequestHandler(BaseHTTPRequestHandler):
     """tattle.py, dependency free simple status monitoring system.
 
@@ -123,9 +133,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         self.out(self.entry(bool(con)))
         cur = con.cursor()
-        for proc in [i[0] for i in cur.execute("SELECT process FROM process")]:
+        for proc in [
+            i[0] for i in execute_retry(con, cur, "SELECT process FROM process")
+        ]:
             last = list(
-                cur.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "select timestamp from log where process = ? "
                     "order by timestamp desc limit ?",
                     [proc, keep],
@@ -134,12 +148,16 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             if len(last) == keep:
                 mintime = last[-1][0]
                 self.out(self.entry("%s %s" % (proc, mintime)))
-                cur.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "insert into old_data select * from log where process = "
                     "? and timestamp < ?",
                     [proc, mintime],
                 )
-                cur.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "delete from log where process = ? and timestamp < ?",
                     [proc, mintime],
                 )
@@ -159,21 +177,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         logs.append(self.entry(bool(con)))
         cur = con.cursor()
-        cur.execute("""SELECT name FROM sqlite_master WHERE type='table'""")
+        execute_retry(con, cur, """SELECT name FROM sqlite_master WHERE type='table'""")
         tables = [i[0] for i in cur.fetchall()]
         for table in self.schema:
             if table not in tables:
                 logs.append(self.entry("Table '%s' doesn't exist, creating." % table))
-                cur.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "create table %s (%s)"
                     % (
                         table,
                         ",".join(["%s %s" % (i[0], i[1]) for i in self.schema[table]]),
-                    )
+                    ),
                 )
                 for i in self.schema[table]:
                     if len(i) > 2 and i[2]:
-                        cur.execute(
+                        execute_retry(
+                            con,
+                            cur,
                             "create %s %s_%s_idx on %s (%s)"
                             % (
                                 i[2],  # 'index' or 'unique index'
@@ -181,11 +203,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                                 i[0],
                                 table,
                                 i[0],
-                            )
+                            ),
                         )
             else:
                 logs.append(self.entry("Table '%s' found ok" % table))
-                cur.execute("PRAGMA table_info(%s)" % table)
+                execute_retry(con, cur, "PRAGMA table_info(%s)" % table)
                 fields = [i[1] for i in cur.fetchall()]
                 for field, type_, index in [
                     (i + (None,))[:3] for i in self.schema[table]
@@ -194,9 +216,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                         logs.append(
                             self.entry("Field '%s' doesn't exist, creating." % field)
                         )
-                        cur.execute("alter table %s add %s %s" % (table, field, type_))
+                        execute_retry(
+                            con, cur, "alter table %s add %s %s" % (table, field, type_)
+                        )
                         if index:
-                            cur.execute(
+                            execute_retry(
+                                con,
+                                cur,
                                 "create %s %s_%s_idx on %s (%s)"
                                 % (
                                     index,  # 'index' or 'unique index'
@@ -204,7 +230,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                                     field,
                                     table,
                                     field,
-                                )
+                                ),
                             )
                         con.commit()
                     else:
@@ -246,17 +272,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
         table = "defer" if status == "DEFER" else "log"
-        for attempt in range(5):
-            time.sleep(3 * attempt + 5 * random.random())
-            try:
-                cur.execute(
-                    f"""insert into {table} (process, timestamp, status, message, ip)
-                    values (?,?,?,?,?)""",
-                    [tag, timestamp, status, message, self.client_address[0]],
-                )
-                con.commit()
-            except sqlite3.OperationalError:
-                pass
+        execute_retry(
+            con,
+            cur,
+            f"""insert into {table} (process, timestamp, status, message, ip)
+            values (?,?,?,?,?)""",
+            [tag, timestamp, status, message, self.client_address[0]],
+        )
 
     def out(self, s):
         if self.args[0] != "log" or self.query:
@@ -308,16 +330,20 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
-        cur.execute("select * from process where process=?", [tag])
+        execute_retry(con, cur, "select * from process where process=?", [tag])
         process = cur.fetchall()
         if process:
-            cur.execute(
+            execute_retry(
+                con,
+                cur,
                 """update process set interval=?, description=?
                 where process=?""",
                 [interval, description, tag],
             )
         else:
-            cur.execute(
+            execute_retry(
+                con,
+                cur,
                 """insert into process (process, description, interval)
                 values (?,?,?)""",
                 [tag, description, interval],
@@ -336,8 +362,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
-        cur.execute(
-            """select description, interval from process where process=?""", [tag]
+        execute_retry(
+            con,
+            cur,
+            """select description, interval from process where process=?""",
+            [tag],
         )
         description = cur.fetchone()
         if not description:
@@ -357,7 +386,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
         )
 
-        cur.execute(
+        execute_retry(
+            con,
+            cur,
             """select * from log where process=? order by timestamp desc limit 20""",
             [tag],
         )
@@ -378,14 +409,18 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         self.out("<p/>")
         for status in "OK", "FAIL":
             if logs[-1][2] != status:
-                cur.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "select * from log where process=? and status=? "
                     "order by timestamp desc limit 20",
                     [tag, status],
                 )
                 log = cur.fetchall()
                 if not log:
-                    cur.execute(
+                    execute_retry(
+                        con,
+                        cur,
                         "select * from old_data where process=? and status=? "
                         "order by timestamp desc limit 20",
                         [tag, status],
@@ -444,9 +479,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         """Delete DEFER status if expired.  If *any* DEFER has expired, delete *all*
         DEFERs for that process, so you can DEFER a lower number later.
         """
-        cur.execute(
+        execute_retry(
+            con,
+            cur,
             "select process, timestamp, min(cast(message as real)) as ttl "
-            "from defer where status = 'DEFER'"
+            "from defer where status = 'DEFER'",
         )
         for process, timestamp, ttl in cur:
             if not timestamp:
@@ -455,7 +492,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
             elapsed = (datetime.datetime.now() - timestamp).total_seconds() / 3600
             if elapsed > ttl:
-                con.execute(
+                execute_retry(
+                    con,
+                    cur,
                     "delete from defer where status = 'DEFER' and process = ?",
                     [process],
                 )
@@ -466,19 +505,23 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         cur = con.cursor()
 
         self.delete_defers(con, cur)
-        cur.execute("select distinct process from defer")
+        execute_retry(con, cur, "select distinct process from defer")
         defered = [i[0] for i in cur]
 
         # (?, ?, ?) for statuses
         in_clause = "(" + ",".join("?" * len(self.statuses)) + ")"
-        cur.execute(
+        execute_retry(
+            con,
+            cur,
             f"""create temporary table last_msg as
             select process, max(timestamp) as last from log where status in {in_clause}
             group by process""",
             self.statuses,
         )
 
-        cur.execute(
+        execute_retry(
+            con,
+            cur,
             """
             select process, 0, 'NEW', process.*, 'NEW', 'NEW' from
             process left join log using (process) where log.process is null
@@ -494,7 +537,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             where (description is null or description not like 'DEFUNCT:%')
 
             order by last
-            """
+            """,
         )
 
         for (
