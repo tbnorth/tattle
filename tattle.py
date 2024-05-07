@@ -22,6 +22,7 @@ def execute_retry(con, cur, query, args=None):
         try:
             cur.execute(query, args)
             con.commit()
+            break
         except sqlite3.OperationalError:
             time.sleep(3 * attempt + 5 * random.random())
 
