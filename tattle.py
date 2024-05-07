@@ -135,7 +135,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         self.out(self.entry(bool(con)))
         cur = con.cursor()
         for proc in [
-            i[0] for i in execute_retry(con, cur, "SELECT process FROM process")
+            i[0] for i in list(cur.execute("SELECT process FROM process"))
         ]:
             last = list(
                 execute_retry(
