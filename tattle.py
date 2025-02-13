@@ -1,5 +1,4 @@
 """see class tattleRequestHandler"""
-
 import datetime
 import os
 import random
@@ -10,6 +9,7 @@ import time
 import traceback
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from itertools import chain, zip_longest
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, unquote
@@ -137,7 +137,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         cur.execute("SELECT process FROM process")
         for proc in [i[0] for i in list(cur)]:
             last = list(
-                    cur.execute(
+                cur.execute(
                     "select timestamp from log where process = ? "
                     "order by timestamp desc limit ?",
                     [proc, keep],
@@ -628,7 +628,23 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             }
 
     def show_status(self, show_all=False):
-        for status in self.get_status(show_all=show_all):
+        statii = self.get_status(show_all=show_all)
+        if self.query and "sort=alpha" in self.query:
+            statii = sorted(statii, key=lambda x: x["part"]["log_process"].lower())
+            # Interleave the two halves of the list so the sorting is not split
+            # between columns
+            statii = (
+                i
+                for i in chain.from_iterable(
+                    zip_longest(
+                        statii[: len(statii) // 2],
+                        statii[len(statii) // 2 :],
+                        fillvalue=None,
+                    )
+                )
+                if i is not None
+            )
+        for status in statii:
             self.out(
                 "<div class='ent'>"
                 "<span class='tag'>{log_process} <span title='{details}' "
@@ -741,6 +757,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             <title>Tattle</title>
             </head><body><div>
             <a href="/">Home</a>
+            <a href="/?sort=alpha">Alpha</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
             <a href="/update">Get updates</a>
