@@ -126,7 +126,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
 
     def archive(self):
-        keep = 100
+        keep = 1000
 
         self.out(self.entry("DB file %s..." % self.dbfile))
         self.out(self.entry("...exists: %s" % os.path.isfile(self.dbfile)))
@@ -387,24 +387,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         execute_retry(
             con,
             cur,
-            """select * from log where process=? order by timestamp desc limit 20""",
+            """select * from log where process=? order by timestamp desc limit 1000""",
             [tag],
         )
         logs = list(reversed(cur.fetchall()))
 
-        for process, timestamp, status, message, ip in logs:
-            timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
-            timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-
-            if status == "FAIL":
-                status = "HARD"
-
-            if status in ("DISABLE", "ENABLE"):
-                message = "%s: %s" % (status, message)
-
-            self.out(self.entry(message, class_=status, ts=timestamp))
-
-        self.out("<p/>")
+        # Find and report last good / bad status
         for status in "OK", "FAIL":
             if logs[-1][2] != status:
                 execute_retry(
@@ -433,6 +421,25 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 else:
                     self.out(f"(no earlier {status} entries)")
 
+        # Show history.
+        self.out("<p/>")
+        logs.reverse()
+        self.out("<div class='left-side'>")
+        for process, timestamp, status, message, ip in logs:
+            timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
+            timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+
+            if status == "FAIL":
+                status = "HARD"
+
+            if status in ("DISABLE", "ENABLE"):
+                message = "%s: %s" % (status, message)
+
+            self.out(self.entry(message, class_=status, ts=timestamp))
+
+
+        self.out("</div>")
+        self.out("<div class='right-side'>")
         for i in "", "/STATUS/FAIL", "/STATUS/OK", "/STATUS/DEFER":
             uptype = i
             type_ = i.replace("STATUS", "status")
@@ -451,6 +458,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 value="%s/%s" % (self.td2str(interval, exact=True), description),
             )
         )
+        self.out("</div>")
 
     def show_help(self):
         self.out(self.template["help"].format(path=self.path))
@@ -751,6 +759,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             a:visited {{ text-decoration: none; color: {FOREGROUND}; }}
             a:hover {{ text-decoration: underline; color: red }}
             .right {{ text-align: right }}
+            .left-side {{ float: left }}
+            .right-side {{ float: right }}
             .time {{ clear: left; }}
             hr {{ border-style: solid; border-color: grey; border-width: 2px 0 0 0 ; }}
             </style>
