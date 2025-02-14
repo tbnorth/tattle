@@ -4,7 +4,6 @@ import os
 import random
 import sqlite3
 import subprocess
-import sys
 import threading
 import time
 import traceback
@@ -685,14 +684,22 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
             out_status = [
                 "HARD"
-                if i[2] == "FAIL" and status["part"]["description"][-1] == "*"
+                if i[2] == "FAIL"
+                and status["part"]["description"][-1] == "*"
+                and status["part"]["out_status"] != "DEFER"
                 else i[2]
                 for i in cur.fetchall()
             ]
             out_status.reverse()
-            image_2d = [
-                sum((self.color_bytes.get(i, [0, 0, 0]) for i in out_status), start=[])
-            ]
+            if out_status[0] == "OK" and len(set(out_status)) == 1:
+                image_2d = [[0, 0, 0]]
+            else:
+                image_2d = [
+                    sum(
+                        (self.color_bytes.get(i, [0, 0, 0]) for i in out_status),
+                        start=[],
+                    )
+                ]
             if not image_2d[0]:
                 image_2d = [[255, 0, 0, 0, 255, 0, 0, 0, 255]]
 
@@ -709,7 +716,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 "  <div class='img-line'>"
                 "    <div class='msg'>{message}</div>"
                 "    <span class='time'>{spare}</span>"
-                "    <br/><img height='1' width='300' src='{img_data}'>"
+                "    <br/><img height='2' width='300' src='{img_data}'>"
                 "  </div>"
                 "</div>".format_map(status["part"])
             )
