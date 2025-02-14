@@ -437,7 +437,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             self.out(self.entry(message, class_=status, ts=timestamp))
 
-
         self.out("</div>")
         self.out("<div class='right-side'>")
         for i in "", "/STATUS/FAIL", "/STATUS/OK", "/STATUS/DEFER":
@@ -641,17 +640,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             statii = sorted(statii, key=lambda x: x["part"]["log_process"].lower())
             # Interleave the two halves of the list so the sorting is not split
             # between columns
-            statii = (
-                i
-                for i in chain.from_iterable(
-                    zip_longest(
-                        statii[: len(statii) // 2],
-                        statii[len(statii) // 2 :],
-                        fillvalue=None,
-                    )
-                )
-                if i is not None
+            statii = chain.from_iterable(
+                zip_longest(statii[: len(statii) // 2], statii[len(statii) // 2 :])
             )
+            statii = (i for i in statii if i is not None)
         for status in statii:
             self.out(
                 "<div class='ent'>"
