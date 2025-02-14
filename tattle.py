@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import traceback
+from collections import namedtuple
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from itertools import chain, zip_longest
@@ -17,6 +18,7 @@ from xml.sax.saxutils import quoteattr
 
 
 def execute_retry(con, cur, query, args=None):
+    """Retry query execution on OperationalError, with backoff."""
     args = [] if args is None else args
     for attempt in range(5):
         try:
@@ -53,7 +55,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         "OK": 0,
         "FAIL": 1,
         "DISABLE": 0,
-        "ENABLEL": 0,
+        "ENABLE": 0,
         "DEFER": 0,
         "DEFUNCT": 0,
         "HARD": 2,
@@ -61,6 +63,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     levels = "clr", "mix", "bad"  # favicon path fragment by error severity
 
     def do_GET(self):
+        """Handle GET requests"""
         self.query = None
         if "?" in self.path:
             self.path, self.query = self.path.split("?", 1)
@@ -115,6 +118,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(f"{path} ACKNOWLEDGED\n".encode("utf8"))
 
     def entry(self, s, class_="", ts=None, prefix=""):
+        """Display a single entry."""
         if class_.strip():
             class_ = " " + class_.strip()
         if not ts:
@@ -126,6 +130,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
 
     def archive(self):
+        """Move all but keep records for each process to old_data, vacuum DB."""
         keep = 1000
 
         self.out(self.entry("DB file %s..." % self.dbfile))
@@ -167,6 +172,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return "logged"
 
     def init(self):
+        """Create tables as needed."""
         logs = []
 
         logs.append(self.entry("DB file %s..." % self.dbfile))
@@ -186,59 +192,65 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     "create table %s (%s)"
                     % (
                         table,
-                        ",".join(["%s %s" % (i[0], i[1]) for i in self.schema[table]]),
+                        ",".join(
+                            ["%s %s" % (i.name, i.type) for i in self.schema[table]]
+                        ),
                     ),
                 )
                 for i in self.schema[table]:
-                    if len(i) > 2 and i[2]:
+                    if i.index:
                         execute_retry(
                             con,
                             cur,
                             "create %s %s_%s_idx on %s (%s)"
                             % (
-                                i[2],  # 'index' or 'unique index'
+                                i.index,  # 'index' or 'unique index'
                                 table,
-                                i[0],
+                                i.name,
                                 table,
-                                i[0],
+                                i.name,
                             ),
                         )
             else:
                 logs.append(self.entry("Table '%s' found ok" % table))
                 execute_retry(con, cur, "PRAGMA table_info(%s)" % table)
                 fields = [i[1] for i in cur.fetchall()]
-                for field, type_, index in [
-                    (i + (None,))[:3] for i in self.schema[table]
-                ]:
-                    if field not in fields:
+                for field in self.schema[table]:
+                    if field.name not in fields:
                         logs.append(
-                            self.entry("Field '%s' doesn't exist, creating." % field)
+                            self.entry(
+                                "Field '%s' doesn't exist, creating." % field.name
+                            )
                         )
                         execute_retry(
-                            con, cur, "alter table %s add %s %s" % (table, field, type_)
+                            con,
+                            cur,
+                            "alter table %s add %s %s"
+                            % (table, field.name, field.type),
                         )
-                        if index:
+                        if field.index:
                             execute_retry(
                                 con,
                                 cur,
                                 "create %s %s_%s_idx on %s (%s)"
                                 % (
-                                    index,  # 'index' or 'unique index'
+                                    field.index,  # 'index' or 'unique index'
                                     table,
-                                    field,
+                                    field.name,
                                     table,
-                                    field,
+                                    field.name,
                                 ),
                             )
                         con.commit()
                     else:
-                        logs.append(self.entry("Field '%s' found ok" % field))
+                        logs.append(self.entry("Field '%s' found ok" % field.name))
 
         self.out("\n".join(logs))
 
         return "logged"
 
     def log(self):
+        """Log a message."""
         args = self.args[:]
         args.pop(0)  # discard command name
 
@@ -279,10 +291,12 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         )
 
     def out(self, s):
+        """Write to HTML output."""
         if self.args[0] != "log" or self.query:
             self.wfile.write(s.encode("utf8") if isinstance(s, str) else s)
 
     def quit(self):
+        """Quit the server - good for reloading code."""
         self.out(self.entry("TERMINATING"))
 
         # wait 1.0 seconds for the request to finish before ending
@@ -308,6 +322,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         return total
 
     def register(self):
+        """Register a process."""
         if self.query:
             dat = parse_qs(self.query)
             tag, dummy = dat["proctype"][0].split("::")
@@ -349,11 +364,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         con.commit()
 
     def setup(self):
+        """Set up the handler."""
         super().setup()
 
         self.dbfile = "tattle.sqlite"
 
     def show(self):
+        """Show a process log."""
         args = self.args[:]
         args.pop(0)  # discard command name
         tag = args.pop(0)
@@ -460,12 +477,15 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         self.out("</div>")
 
     def show_help(self):
+        """Show help."""
         self.out(self.template["help"].format(path=self.path))
 
     def show_all(self):
+        """Show all processes."""
         self.show_status(show_all=True)
 
     def td2str(self, sep, exact=False):
+        """Convert a timedelta to a compact string."""
         if not isinstance(sep, timedelta):
             sep = timedelta(seconds=float(sep))
         total = sep.total_seconds()
@@ -506,6 +526,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 con.commit()
 
     def get_status(self, show_all=False):
+        """Get status of all processes."""
         con = sqlite3.connect(self.dbfile)
         cur = con.cursor()
 
@@ -635,6 +656,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             }
 
     def show_status(self, show_all=False):
+        """Show status of a all processes."""
         statii = self.get_status(show_all=show_all)
         if self.query and "sort=alpha" in self.query:
             statii = sorted(statii, key=lambda x: x["part"]["log_process"].lower())
@@ -653,19 +675,20 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 "</div>".format_map(status["part"])
             )
 
+    Field = namedtuple("Field", "name type index", defaults=(None,))
     schema = {
         "process": [
-            ("process", "text", "unique index"),
-            ("interval", "float"),
-            ("description", "text"),
+            Field("process", "text", "unique index"),
+            Field("interval", "float"),
+            Field("description", "text"),
             # ('active', 'boolean'), # ('test', 'test'),
         ],
         "log": [
-            ("process", "text", "index"),
-            ("timestamp", "datetime", "index"),
-            ("status", "text"),
-            ("message", "text"),
-            ("ip", "text"),
+            Field("process", "text", "index"),
+            Field("timestamp", "datetime", "index"),
+            Field("status", "text"),
+            Field("message", "text"),
+            Field("ip", "text"),
         ],
     }
     schema["old_data"] = schema["log"]
@@ -777,10 +800,13 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
 
 class ThreadedServer(ThreadingMixIn, HTTPServer):
+    """Server setup."""
+
     pass
 
 
 def run(server_class=ThreadedServer, handler_class=tattleRequestHandler):
+    """Start server."""
     server_address = ("0.0.0.0", 8111)
     httpd = server_class(server_address, handler_class)
 
