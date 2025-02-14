@@ -4,17 +4,22 @@ import os
 import random
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 import traceback
+from base64 import b64encode
 from collections import namedtuple
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from io import BytesIO
 from itertools import chain, zip_longest
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, unquote
 from xml.sax.saxutils import quoteattr
+
+import png
 
 
 def execute_retry(con, cur, query, args=None):
@@ -91,8 +96,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         if self.args[0] != "log" or self.query:
             self.send_response(200)
             self.send_header("Content-type", "text/html")
-            if "Host" in self.headers:
-                self.send_header("Refresh", "70; url=//%s" % self.headers["Host"])
+            # if "Host" in self.headers:
+            #     self.send_header("Refresh", "70; url=//%s" % self.headers["Host"])
             self.end_headers()
 
         # self.out does nothing when self.args[0] == 'log'
@@ -370,7 +375,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         self.dbfile = "tattle.sqlite"
 
     def show(self):
-        """Show a process log."""
+        """Show a single process log."""
         args = self.args[:]
         args.pop(0)  # discard command name
         tag = args.pop(0)
@@ -639,14 +644,16 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 ip,
             )
 
-            log_process = "<a title=%s href=%s>%s</a> " % (
+            log_process_link = "<a title=%s href=%s>%s</a> " % (
                 quoteattr(description),
                 quoteattr("show/" + log_process),
                 log_process,
             )
             yield {
                 "part": dict(
-                    log_process=log_process,
+                    log_process=log_process_link,
+                    process=log_process,
+                    description=description,
                     details=details,
                     out_status=out_status,
                     timestamp=timestamp,
@@ -659,19 +666,51 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         """Show status of a all processes."""
         statii = self.get_status(show_all=show_all)
         if self.query and "sort=alpha" in self.query:
-            statii = sorted(statii, key=lambda x: x["part"]["log_process"].lower())
+            statii = sorted(statii, key=lambda x: x["part"]["process"].lower())
             # Interleave the two halves of the list so the sorting is not split
             # between columns
             statii = chain.from_iterable(
                 zip_longest(statii[: len(statii) // 2], statii[len(statii) // 2 :])
             )
             statii = (i for i in statii if i is not None)
+        con = sqlite3.connect(self.dbfile)
+        cur = con.cursor()
         for status in statii:
+            # Create from array
+            execute_retry(
+                con,
+                cur,
+                """select * from log where process=? order by timestamp desc limit 100""",
+                [status["part"]["process"]],
+            )
+            out_status = [
+                "HARD"
+                if i[2] == "FAIL" and status["part"]["description"][-1] == "*"
+                else i[2]
+                for i in cur.fetchall()
+            ]
+            out_status.reverse()
+            image_2d = [
+                sum((self.color_bytes.get(i, [0, 0, 0]) for i in out_status), start=[])
+            ]
+            if not image_2d[0]:
+                image_2d = [[255, 0, 0, 0, 255, 0, 0, 0, 255]]
+
+            # Save as PNG
+            img_data = BytesIO()
+            png.from_array(image_2d, "RGB").write(img_data)
+            img_data = img_data.getvalue()
+            img_data = "data:image/png;base64," + b64encode(img_data).decode("utf-8")
+            status["part"]["img_data"] = img_data
             self.out(
                 "<div class='ent'>"
-                "<span class='tag'>{log_process} <span title='{details}' "
-                "class='ts {out_status}'>{timestamp} </span> </span>"
-                " <span class='msg'> {message} <span class='time'>{spare}</span></span>"
+                "  <div class='tag'>{log_process}</div>"
+                "  <div title='{details}' class='ts {out_status}'>{timestamp}</div>"
+                "  <div class='img-line'>"
+                "    <div class='msg'>{message}</div>"
+                "    <span class='time'>{spare}</span>"
+                "    <br/><img height='1' width='300' src='{img_data}'>"
+                "  </div>"
                 "</div>".format_map(status["part"])
             )
 
@@ -746,6 +785,11 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         "DISABLE": "#2aa198",
         "ENABLE": "cyan",
     }
+    color_bytes = {
+        k: [int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16)]
+        for k, v in colors.items()
+        if v[0] == "#" and len(v) == 7
+    }
     if 0:  # color-blind friendly version
         colors = {
             "FAIL": "yellow",
@@ -764,10 +808,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .OK {{ background: {OK}; }}
             .DISABLE {{ background: {DISABLE}; }}
             .ENABLE {{ background: {ENABLE}; }}
-            .ent {{ float: left; width: 49% }}
-            .tag {{ display: block; width: 40%; float: left; text-align:right; }}
-            .msg {{ display: block; float: left; width: 59%; padding-left: 1%;}}
-            .ts {{ color: blue; font-size: 75%; }}
+            .ent {{ float: left; width: 49%; margin-top: 0.5em; alignment-baseline: text-bottom; }}
+            .tag {{ display: block; width: 20%; float: left; text-align:right; }}
+            .msg {{ float: left; padding-left: 1%;}}
+            .ts {{ color: blue; font-size: 75%; float: left; margin: 0 1ex; }}
             .time {{ font-size: 75%; font-style: italic; }}
             a {{ text-decoration: none; color: {FOREGROUND}; }}
             a:active {{ text-decoration: none; color: {FOREGROUND}; }}
@@ -776,7 +820,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .right {{ text-align: right }}
             .left-side {{ float: left }}
             .right-side {{ float: right }}
-            .time {{ clear: left; }}
+            .time {{ float: left; }}
+            .img-line {{ float: left; width: 60%; image-rendering: pixelated; }}
             hr {{ border-style: solid; border-color: grey; border-width: 2px 0 0 0 ; }}
             </style>
             <title>Tattle</title>
