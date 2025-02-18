@@ -95,8 +95,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         if self.args[0] != "log" or self.query:
             self.send_response(200)
             self.send_header("Content-type", "text/html")
-            # if "Host" in self.headers:
-            #     self.send_header("Refresh", "70; url=//%s" % self.headers["Host"])
+            if "Host" in self.headers:
+                self.send_header(
+                    "Refresh", "70; url=//%s/?sort=alpha" % self.headers["Host"]
+                )
             self.end_headers()
 
         # self.out does nothing when self.args[0] == 'log'
@@ -450,7 +452,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
             timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 
-            if status == "FAIL":
+            if status == "FAIL":  # and description.strip()[-1] == "*":
                 status = "HARD"
 
             if status in ("DISABLE", "ENABLE"):
@@ -613,8 +615,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     now > due or status not in ("OK", "DISABLE", "ENABLE")
                 ):
                     out_status = "HARD" if description.strip()[-1] == "*" else "FAIL"
-                if status == "FAIL":
-                    out_status = "HARD"
+                # if status == "FAIL":
+                #     out_status = "HARD"
 
                 if now > due:
                     sep = now - due
@@ -685,7 +687,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             out_status = [
                 "HARD"
                 if i[2] == "FAIL"
-                and status["part"]["description"][-1] == "*"
+                # and status["part"]["description"].strip()[-1] == "*"
                 and status["part"]["out_status"] != "DEFER"
                 else i[2]
                 for i in cur.fetchall()
@@ -833,8 +835,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             </style>
             <title>Tattle</title>
             </head><body><div>
-            <a href="/">Home</a>
-            <a href="/?sort=alpha">Alpha</a>
+            <a href="/?sort=alpha">Home</a>
+            <a href="/">Recent</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
             <a href="/update">Get updates</a>
