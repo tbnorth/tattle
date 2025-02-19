@@ -451,10 +451,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         for process, timestamp, status, message, ip in logs:
             timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
             timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-
-            if status == "FAIL":  # and description.strip()[-1] == "*":
+            if status == "FAIL":
                 status = "HARD"
-
             if status in ("DISABLE", "ENABLE"):
                 message = "%s: %s" % (status, message)
 
@@ -615,8 +613,6 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     now > due or status not in ("OK", "DISABLE", "ENABLE")
                 ):
                     out_status = "HARD" if description.strip()[-1] == "*" else "FAIL"
-                # if status == "FAIL":
-                #     out_status = "HARD"
 
                 if now > due:
                     sep = now - due
@@ -684,14 +680,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                 """select * from log where process=? order by timestamp desc limit 100""",
                 [status["part"]["process"]],
             )
-            out_status = [
-                "HARD"
-                if i[2] == "FAIL"
-                # and status["part"]["description"].strip()[-1] == "*"
-                and status["part"]["out_status"] != "DEFER"
-                else i[2]
-                for i in cur.fetchall()
-            ]
+            out_status = ["HARD" if i[2] == "FAIL" else i[2] for i in cur.fetchall()]
             out_status.reverse()
             if out_status[0] == "OK" and len(set(out_status)) == 1:
                 image_2d = [[0, 0, 0]]
