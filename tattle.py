@@ -123,7 +123,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(f"{path} ACKNOWLEDGED\n".encode("utf8"))
 
-    def entry(self, s, class_="", ts=None, prefix=""):
+    def entry(self, s, class_="", ts=None, prefix="", full_time=False):
         """Display a single entry."""
         if class_.strip():
             class_ = " " + class_.strip()
@@ -131,7 +131,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             ts = datetime.datetime.now()
 
         if isinstance(ts, datetime.datetime):
-            ts = ts.strftime("%d %H:%M:%S")
+            fmt = "%b %d %Y %H:%M:%S" if full_time else "%d %H:%M:%S"
+            ts = ts.strftime(fmt)
 
         return "<div>%s<span class='ts%s'>%s</span> %s</div>" % (prefix, class_, ts, s)
 
@@ -456,7 +457,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             if status in ("DISABLE", "ENABLE"):
                 message = "%s: %s" % (status, message)
 
-            self.out(self.entry(message, class_=status, ts=timestamp))
+            self.out(self.entry(message, class_=status, ts=timestamp, full_time=True))
 
         self.out("</div>")
         self.out("<div class='right-side'>")
