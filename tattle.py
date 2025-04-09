@@ -97,7 +97,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html")
             if "Host" in self.headers:
                 self.send_header(
-                    "Refresh", "70; url=//%s/?sort=alpha" % self.headers["Host"]
+                    "Refresh", "70; url=//%s/" % self.headers["Host"]
                 )
             self.end_headers()
 
@@ -663,7 +663,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def show_status(self, show_all=False):
         """Show status of a all processes."""
         statii = self.get_status(show_all=show_all)
-        if self.query and "sort=alpha" in self.query:
+        if not (self.query and "sort=" in self.query and "sort=alpha" not in self.query):
+            # I.e. always do this because alpha is the default
             statii = sorted(statii, key=lambda x: x["part"]["process"].lower())
             # Interleave the two halves of the list so the sorting is not split
             # between columns
@@ -825,8 +826,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             </style>
             <title>Tattle</title>
             </head><body><div>
-            <a href="/?sort=alpha">Home</a>
-            <a href="/">Recent</a>
+            <a href="/">Home</a>
+            <a href="/?sort=recent">Recent</a>
             <a href="/all">Show disabled</a>
             <a href="/quit">Re-start</a>
             <a href="/update">Get updates</a>
