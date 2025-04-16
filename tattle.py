@@ -98,7 +98,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             delay = 3 if self.query else 70
             if "Host" in self.headers:
                 self.send_header(
-                    "Refresh", "{delay}; url=//%s/" % self.headers["Host"]
+                    "Refresh", f"{delay}; url=//%s/" % self.headers["Host"]
                 )
             self.end_headers()
 
