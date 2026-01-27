@@ -95,7 +95,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         if self.args[0] != "log" or self.query:
             self.send_response(200)
             self.send_header("Content-type", "text/html")
-            delay = 3 if self.query else 70
+            delay = 1 if self.query else 70
             if "Host" in self.headers:
                 self.send_header(
                     "Refresh", f"{delay}; url=//%s/" % self.headers["Host"]
@@ -685,7 +685,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
             out_status = ["HARD" if i[2] == "FAIL" else i[2] for i in cur.fetchall()]
             out_status.reverse()
-            if out_status[0] == "OK" and len(set(out_status)) == 1:
+            if len(set(out_status)) == 1 and out_status[0] == "OK":
                 image_2d = [[0, 0, 0]]
             else:
                 image_2d = [
