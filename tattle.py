@@ -419,7 +419,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
         # Find and report last good / bad status
         for status in "OK", "FAIL":
-            if logs[-1][2] != status:
+            if logs and logs[-1][2] != status:
                 execute_retry(
                     con,
                     cur,
