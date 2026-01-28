@@ -8,7 +8,7 @@ import threading
 import time
 import traceback
 from base64 import b64encode
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
@@ -52,6 +52,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     /log/<process>/msg. text
     /log/<process>/status/[OK|FAIL|ENABLE|DISABLE]/msg. text
     /log/<process>/status/DEFER/<seconds>
+    /history/<process>
+      report state transitions over current and archival data
     """
 
     statuses = "OK", "FAIL", "DISABLE", "ENABLE", "DEFER", "DEFUNCT"
@@ -85,6 +87,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             "register": self.register,
             "log": self.log,
             "show": self.show,
+            "history": self.history,
             "update": self.update,
             "report": self.reports,
             "favicon.ico": self.favicon,
@@ -437,14 +440,19 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                         [tag, status],
                     )
                     log = cur.fetchall()
+                self.out("<div>")
                 if log:
                     process, timestamp, status_, message, ip = log[0]
                     self.out(
-                        f"<div>Last {status}</div>"
-                        + self.entry(message, class_=status_, ts=timestamp)
+                        f"Last {status}"
+                        + self.entry(message, class_=status_, ts=timestamp).replace(
+                            "div>", "span>"
+                        )
                     )
                 else:
                     self.out(f"(no earlier {status} entries)")
+                self.out(f" <a href='/history/{tag}'>history</a>")
+                self.out("</div>")
 
         # Show history.
         self.out("<p/>")
@@ -481,6 +489,94 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
         )
         self.out("</div>")
+
+    def history(self):
+        """Show a single process long-term history."""
+        # START FIXME: duplicate code from show()
+        args = self.args[:]
+        args.pop(0)  # discard command name
+        tag = args.pop(0)
+
+        con = sqlite3.connect(self.dbfile)
+        cur = con.cursor()
+        execute_retry(
+            con,
+            cur,
+            """select description, interval from process where process=?""",
+            [tag],
+        )
+        description = cur.fetchone()
+        if not description:
+            description = "*unregistered process, assuming 5m interval*"
+            interval = 300
+        else:
+            description, interval = description
+            interval = float(interval)
+
+        if not interval:
+            interval = 300
+
+        interval_td = datetime.timedelta(0, interval)
+        self.out(
+            "<h1>{process}: {intfmt} : {description}</h1>".format(
+                process=tag, intfmt=self.td2str(interval_td), description=description
+            )
+        )
+
+        # END FIXME: duplicate code from show()
+
+        total = defaultdict(float)
+
+        self.out("<div class='left-side'>")
+
+        for source in "log", "old_data":
+            self.out("<div>")
+            execute_retry(
+                con,
+                cur,
+                f"""select * from {source} where process=? order by timestamp desc""",
+                [tag],
+            )
+            logs = list(reversed(cur.fetchall()))
+
+            # Show history.
+            logs.reverse()
+            last_state = None
+            last_time = None
+            for process, timestamp, status, message, ip in logs:
+                if status != last_state:
+                    if last_state:
+                        total[last_state] += self._report_history(
+                            last_state, last_time, timestamp
+                        )
+                    last_state = status
+                    last_time = timestamp
+
+            if last_time:
+                total[status] += self._report_history(status, last_time, timestamp)
+            self.out("</div>")
+
+        self.out("</div>")
+        gt = sum(total.values())
+        for key, value in total.items():
+            style = "HARD" if key == "FAIL" else key
+            self.out(
+                f"<div><span class='{style} st'>{key}</span>: "
+                f"{value:.3f} days, {value/gt*100:.2f}%</div>"
+            )
+
+    def _report_history(self, status, last_time, timestamp):
+        last_time = last_time.split(".")[0]  # drop fractional seconds, for now
+        last_time = datetime.datetime.strptime(last_time, "%Y-%m-%d %H:%M:%S")
+        timestamp = timestamp.split(".")[0]  # drop fractional seconds, for now
+        timestamp = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        duration = last_time - timestamp
+        style = "HARD" if status == "FAIL" else status
+        self.out(
+            f"<div><span class='{style} st'>{status}</span> "
+            f"<span class='du'>for {duration}</span> from {last_time} to {timestamp}</div>"
+        )
+        return duration.total_seconds() / (24 * 3600)
 
     def show_help(self):
         """Show help."""
@@ -664,7 +760,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
     def show_status(self, show_all=False):
         """Show status of a all processes."""
         statii = self.get_status(show_all=show_all)
-        if not (self.query and "sort=" in self.query and "sort=alpha" not in self.query):
+        if not (
+            self.query and "sort=" in self.query and "sort=alpha" not in self.query
+        ):
             # I.e. always do this because alpha is the default
             statii = sorted(statii, key=lambda x: x["part"]["process"].lower())
             # Interleave the two halves of the list so the sorting is not split
@@ -813,6 +911,8 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .tag {{ display: block; width: 20%; float: left; text-align:right; }}
             .msg {{ float: left; padding-left: 1%;}}
             .ts {{ color: blue; font-size: 75%; float: left; margin: 0 1ex; }}
+            .st {{ float: left; color: blue; width: 4em; margin: 0 1ex; }}
+            .du {{ float: left; width: 12em; margin: 0 1ex; }}
             .time {{ font-size: 75%; font-style: italic; }}
             a {{ text-decoration: none; color: {FOREGROUND}; }}
             a:active {{ text-decoration: none; color: {FOREGROUND}; }}
