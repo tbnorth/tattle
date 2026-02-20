@@ -802,15 +802,17 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             img_data = "data:image/png;base64," + b64encode(img_data).decode("utf-8")
             status["part"]["img_data"] = img_data
             self.out(
-                "<div class='ent'>"
-                "  <div class='tag'>{log_process}</div>"
-                "  <div title='{details}' class='ts {out_status}'>{timestamp}</div>"
-                "  <div class='img-line'>"
-                "    <div class='msg'>{message}</div>"
-                "    <span class='time'>{spare}</span>"
-                "    <br/><img height='2' width='300' src='{img_data}'>"
-                "  </div>"
-                "</div>".format_map(status["part"])
+                """<div class='ent'>
+                  <div class='tag'>{log_process}</div>
+                  <div title='{details}' class='ts {out_status}'>{timestamp}</div>
+                  <div class='img-line'>
+                    <div class='msg'>{message}</div>
+                    <span class='time'>{spare}</span>
+                    <br/><img height='2' width='300' src='{img_data}'>
+                  </div>
+                </div>
+                <div class='box {out_status}' title='{process} {details}'></div> 
+                """.format_map(status["part"])
             )
 
     Field = namedtuple("Field", "name type index", defaults=(None,))
@@ -883,6 +885,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         "OK": "#859900",
         "DISABLE": "#2aa198",
         "ENABLE": "cyan",
+        "DEFER": "none",
+        "DEFER-BOX": "grey",
+        "FAIL-BOX": "#4c51a4",
     }
     color_bytes = {
         k: [int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16)]
@@ -900,13 +905,27 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
     template = {
         "hdr": """<html><head><style>
+            @media only screen
+            and (max-width : 50em) {{
+                .ent,.top-menu {{ display: none; }}
+            }}
+            @media only screen
+            and (min-width : 50em) {{
+                .box {{ display: none; }}
+            }}
             body {{ font-family: sans-serif; font-size: 90%;
                    background: {BACKGROUND}; color: {FOREGROUND}; }}
             .FAIL {{ background: {FAIL}; }}
+            .box.FAIL {{ background: {FAIL-BOX}; }}
             .HARD {{ background: {HARD}; }}
             .OK {{ background: {OK}; }}
             .DISABLE {{ background: {DISABLE}; }}
             .ENABLE {{ background: {ENABLE}; }}
+            .DEFER {{ background: {DEFER}; }}
+            .box.DEFER {{ background: {DEFER-BOX}; }}
+            .box {{ float: left; min-width: 3em; min-height: 3em;
+                    box-shadow: inset 0 0 10px #0004;
+            }}
             .ent {{ float: left; width: 49%; margin-top: 0.5em; alignment-baseline: text-bottom; }}
             .tag {{ display: block; width: 20%; float: left; text-align:right; }}
             .msg {{ float: left; padding-left: 1%;}}
@@ -914,6 +933,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .st {{ float: left; color: blue; width: 4em; margin: 0 1ex; }}
             .du {{ float: left; width: 12em; margin: 0 1ex; }}
             .time {{ font-size: 75%; font-style: italic; }}
+            div.time {{ clear: left; }}
             a {{ text-decoration: none; color: {FOREGROUND}; }}
             a:active {{ text-decoration: none; color: {FOREGROUND}; }}
             a:visited {{ text-decoration: none; color: {FOREGROUND}; }}
@@ -926,7 +946,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             hr {{ border-style: solid; border-color: grey; border-width: 2px 0 0 0 ; }}
             </style>
             <title>Tattle</title>
-            </head><body><div>
+            </head><body><div class="top-menu">
             <a href="/">Home</a>
             <a href="/?sort=recent">Recent</a>
             <a href="/all">Show disabled</a>
