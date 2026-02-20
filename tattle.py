@@ -811,7 +811,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                     <br/><img height='2' width='300' src='{img_data}'>
                   </div>
                 </div>
-                <div class='box {out_status}' title='{process} {details}'></div> 
+                <div class='box {out_status}' title='{process} {details}'>
+                  <a href='show/{process}'></a>
+                </div> 
                 """.format_map(status["part"])
             )
 
@@ -925,7 +927,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             .box.DEFER {{ background: {DEFER-BOX}; }}
             .box {{ float: left; min-width: 3em; min-height: 3em;
                     box-shadow: inset 0 0 10px #0004;
+                    position: relative;
             }}
+            .box a {{ position: absolute; width: 100%; height: 100%; }}
             .ent {{ float: left; width: 49%; margin-top: 0.5em; alignment-baseline: text-bottom; }}
             .tag {{ display: block; width: 20%; float: left; text-align:right; }}
             .msg {{ float: left; padding-left: 1%;}}
@@ -953,7 +957,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             <a href="/quit">Re-start</a>
             <a href="/update">Get updates</a>
             <a href="/report">Reports</a>
-            </div><hr/>""".format(**colors),
+            <hr/></div>""".format(**colors),
         "ftr": """<div class='time'>{time}</div></body></html>""",
         "help": """<pre>HELP</pre>
             <pre>{path}</pre>""",
