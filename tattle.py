@@ -881,7 +881,9 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
         "DISABLE": "#ccc",
         "ENABLE": "cyan",
     }
-    colors = {  # not finished
+    colors = {
+        # FIXME: see `:root {{ color-scheme: dark; }}` below / in style
+        # ok for this dark style but not light?
         "BACKGROUND": "black",
         "FOREGROUND": "#ccc",
         "FAIL": "#6c71c4",
@@ -917,6 +919,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             and (min-width : 50em) {{
                 .box {{ display: none; }}
             }}
+            :root {{ color-scheme: dark; }}
             body {{ font-family: sans-serif; font-size: 90%;
                    background: {BACKGROUND}; color: {FOREGROUND}; }}
             .FAIL {{ background: {FAIL}; }}
