@@ -810,7 +810,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
                   <div class='img-line'>
                     <div class='msg'>{message}</div>
                     <span class='time'>{spare}</span>
-                    <br/><img height='2' width='300' src='{img_data}'>
+                    <br/><img height='2.5' width='300' src='{img_data}'>
                   </div>
                 </div>
                 <div class='box {out_status}' title='{process} {details}'>
