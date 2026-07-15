@@ -783,8 +783,10 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
             )
             out_status = ["HARD" if i[2] == "FAIL" else i[2] for i in cur.fetchall()]
             out_status.reverse()
+            mode = "RGB"
             if len(set(out_status)) == 1 and out_status[0] == "OK":
-                image_2d = [[0, 0, 0]]
+                image_2d = [[0, 0, 0, 0]]
+                mode = "RGBA"
             else:
                 image_2d = [
                     sum(
@@ -797,7 +799,7 @@ class tattleRequestHandler(BaseHTTPRequestHandler):
 
             # Save as PNG
             img_data = BytesIO()
-            png.from_array(image_2d, "RGB").write(img_data)
+            png.from_array(image_2d, mode).write(img_data)
             img_data = img_data.getvalue()
             img_data = "data:image/png;base64," + b64encode(img_data).decode("utf-8")
             status["part"]["img_data"] = img_data
